@@ -145,9 +145,13 @@ void LogicServer::polling_loop() {
     pre_trig_buffer_.reserve(pre_trig_max_.load(std::memory_order_acquire));
     bool in_pre_trig = false;
 
+    // Timeout para SINGLE mode: 1s sin disparo → forzar captura
+    std::chrono::steady_clock::time_point single_start_time = {};
+
     while (running_) {
         // Si estamos pausados (STOP), no leer GPIO ni llenar buffer
         if (paused_.load(std::memory_order_acquire)) {
+            single_start_time = {};
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             next = std::chrono::steady_clock::now();
             trigger_last_init = false;
@@ -214,17 +218,20 @@ void LogicServer::polling_loop() {
                         // === TRIGGER DISPARADO ===
                         trigger_triggered_.store(true, std::memory_order_release);
                         trigger_timestamp_ns_.store(ts, std::memory_order_release);
-                        // En SINGLE mode: limpiar flag para que broadcast loop
-                        // no espere mas (y para que polling loop no siga bloqueando)
-                        if (single_request_.load(std::memory_order_acquire)) {
+                        single_start_time = {};
+
+                        // Determinar si es SINGLE mode ANTES de limpiar el flag
+                        bool was_single = single_request_.load(std::memory_order_acquire);
+                        if (was_single) {
                             single_request_.store(false, std::memory_order_release);
                         }
-                        LOG_INFO("Trigger", "Fired! GPIO%d state=%d  pre=%zu samples",
-                                 trigger_pin, cur, pre_trig_buffer_.size());
+                        LOG_INFO("Trigger", "Fired! GPIO%d state=%d  pre=%zu samples%s",
+                                 trigger_pin, cur, pre_trig_buffer_.size(),
+                                 was_single ? " (SINGLE)" : "");
 
                         // 1) Volcar pre-trigger al buffer principal (solo en SINGLE,
                         //    donde las muestras NO fueron al buffer principal)
-                        if (single_request_.load(std::memory_order_acquire)) {
+                        if (was_single) {
                             for (auto& s : pre_trig_buffer_) {
                                 buffer_.push(s.timestamp_ns, s.gpio_state);
                             }
@@ -247,12 +254,37 @@ void LogicServer::polling_loop() {
                             // En SINGLE mode: bloquear buffer principal hasta que dispare
                             // En RUN mode: dejar fluir muestras al buffer principal
                             if (single_request_.load(std::memory_order_acquire)) {
-                                auto now = std::chrono::steady_clock::now();
-                                while (now < next) {
-                                    std::this_thread::yield();
-                                    now = std::chrono::steady_clock::now();
+                                // SINGLE TIMEOUT: 1s sin disparo → forzar captura
+                                if (single_start_time == std::chrono::steady_clock::time_point{}) {
+                                    single_start_time = std::chrono::steady_clock::now();
                                 }
-                                continue;
+
+                                auto elapsed = std::chrono::steady_clock::now() - single_start_time;
+                                if (elapsed >= std::chrono::seconds(1)) {
+                                    // Timeout: forzar captura con datos acumulados
+                                    // NO limpiar single_request_ aqui — el broadcast loop
+                                    // necesita ver single_mode=true para pausar el sistema.
+                                    LOG_INFO("Trigger", "SINGLE timeout — forced capture (%zu pre-trigger samples)",
+                                             pre_trig_buffer_.size());
+                                    trigger_triggered_.store(true, std::memory_order_release);
+                                    trigger_timestamp_ns_.store(ts, std::memory_order_release);
+                                    single_start_time = {};
+                                    // Volcar pre-trigger al buffer principal
+                                    for (auto& s : pre_trig_buffer_) {
+                                        buffer_.push(s.timestamp_ns, s.gpio_state);
+                                    }
+                                    pre_trig_buffer_.clear();
+                                    in_pre_trig = false;
+                                    // Dejar caer al push general
+                                } else {
+                                    // Seguir esperando
+                                    auto now = std::chrono::steady_clock::now();
+                                    while (now < next) {
+                                        std::this_thread::yield();
+                                        now = std::chrono::steady_clock::now();
+                                    }
+                                    continue;
+                                }
                             }
                         }
                         // pt_max == 0 ó RUN mode: dejar caer al push general
@@ -262,6 +294,7 @@ void LogicServer::polling_loop() {
                 trigger_armed_.store(false, std::memory_order_release);
             }
         } else if (!trigger_armed_.load(std::memory_order_acquire)) {
+            single_start_time = {};
             // Si no hay trigger, asegurar que pre-trigger buffer esta limpio
             if (in_pre_trig) {
                 pre_trig_buffer_.clear();
