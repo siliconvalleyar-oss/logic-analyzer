@@ -48,14 +48,24 @@
 - [ ] Trigger por patron en vez de solo flanco
 - [ ] Mascara de canales (ocultar/mostrar)
 
-## v1.6.0 — Multiplataforma
+## v1.6.0 — Trigger Activo, Pre-Trigger, Auto-Fit, Decodificación de Selección
+
+- [x] **Trigger funcional**: Rising, Falling, High, Low, None con máquina de estados
+- [x] **Pre-Trigger buffer**: muestras previas al disparo (configurable Off/64/128/256/512/1K/2K/4K)
+- [x] **Run/Stop cíclico**: sin bloqueos ni resource leaks
+- [x] **Decodificación de selección**: binario, hex, decimal, pulso, duty cycle con cursores A/B
+- [x] **Auto-Fit en primera carga**: zoom automático al recibir datos
+- [x] **Persistencia de pre-trigger**: guardado en config.json
+- [x] **WebSocket dinámico**: usa el mismo puerto de la página cargada
+
+## v1.7.0 — Multiplataforma
 
 - [ ] Soporte para Pico W con PIO (10 MSps, 16 canales)
 - [ ] Cliente Qt desktop (C++ nativo)
 - [ ] Cliente Flutter mobile (Dart)
 - [ ] API REST para control remoto
 
-## v1.7.0 — Estabilidad y produccion
+## v1.8.0 — Estabilidad y produccion
 
 - [ ] Tests unitarios: buffer, trigger, decodificadores
 - [ ] Test de resistencia: 24h sin perdida de datos

@@ -15,15 +15,12 @@ SRCS := main.cpp \
 
 OBJS := $(SRCS:.cpp=.o)
 
-# Detect architecture
+# Detect architecture (ARM = Raspberry Pi)
 UNAME_M := $(shell uname -m)
+IS_ARM := $(or $(findstring arm,$(UNAME_M)),$(findstring aarch64,$(UNAME_M)))
 
-# On ARM (Raspberry Pi), enable GPIO mmap
-ifneq (,$(findstring arm,$(UNAME_M)))
-    CXXFLAGS += -DGPIO_MMAP=1
-    LDFLAGS  += -latomic
-endif
-ifneq (,$(findstring aarch64,$(UNAME_M)))
+# On ARM, enable GPIO mmap and link libatomic (needed for 8-byte atomics on 32-bit)
+ifneq (,$(IS_ARM))
     CXXFLAGS += -DGPIO_MMAP=1
     LDFLAGS  += -latomic
 endif

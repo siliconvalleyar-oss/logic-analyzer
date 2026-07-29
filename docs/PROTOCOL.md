@@ -32,9 +32,21 @@
 
 ### Trigger
 ```json
-{"cmd":"set_trigger","pin":17,"type":"rising","hpos":50}
-// type: "rising" | "falling" | "either" | "high" | "low"
-// hpos: posicion horizontal del trigger en % (0-100)
+{"cmd":"set_trigger","pin":17,"type":"rising"}
+// type: "none" | "rising" | "falling" | "either" | "high" | "low"
+// pin: -1 para desactivar, o GPIO number
+// Al enviar, el servidor arma/desarma el trigger inmediatamente
+// y persiste la configuracion en config.json
+```
+
+### Pre-Trigger
+```json
+{"cmd":"set_pretrig","depth":512}
+// depth: cantidad de muestras previas al disparo
+// Valores: 0 (Off), 64, 128, 256, 512, 1024, 2048, 4096
+// Las muestras anteriores al trigger se almacenan en un buffer circular
+// y se vuelcan al buffer principal cuando el trigger se dispara.
+// Se persiste en config.json.
 ```
 
 ### Timebase (zoom)
@@ -65,8 +77,28 @@
 }
 ```
 - `states`: array de enteros, bit k = estado del pin `pins[k]`
-- `trigger_index`: indice dentro del array donde ocurrio el trigger (-1 si no hubo)
+- `trigger_index`: indice dentro del array donde ocurrio el trigger (-1 si no hubo).
+  El trigger se detecta en el polling loop (no post-procesamiento) y se ubica
+  por timestamp exacto en el batch de waveform.
 - `dt_us`: intervalo entre muestras en microsegundos
+
+### Config message (enviado al conectar WebSocket)
+```json
+{
+  "type":"config",
+  "timebase_us":500000,
+  "trigger_pin":17,
+  "trigger_type":"rising",
+  "sample_rate_hz":500000,
+  "max_samples":65536,
+  "pre_trig_depth":512,
+  "zoom_level":1.0,
+  "pan_x":0.0,
+  "pins":[17,22,23,24,27],
+  "decoder":null
+}
+```
+- `pre_trig_depth`: profundidad de pre-trigger configurada (0 = desactivado)
 
 ### State update
 ```json

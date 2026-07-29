@@ -123,6 +123,43 @@ Los decodificadores corren en **JavaScript en el navegador** (no en la Pi). Toma
 Decodificacion de codificacion Manchester (Ethernet 10BASE-T, RFID):
 - Transicion en medio del bit: 0 = baja→sube, 1 = sube→baja
 
+## Selection Decoding (Análisis Manual con Cursores)
+
+Además de los decodificadores automáticos de protocolo, el analizador incluye
+**análisis manual** de la región seleccionada con los cursores A/B.
+
+### Cómo funciona
+1. Habilitar cursores (botón `Cursors` en el toolbar o tecla `C`)
+2. Hacer clic en el waveform para posicionar cursor A y cursor B
+3. El panel de cursores muestra automáticamente:
+
+### Información mostrada
+
+| Campo | Descripción | Ejemplo |
+|-------|-------------|---------|
+| **Bits** | Cantidad de transiciones y GPIO analizado | `12 (GPIO17)` |
+| **Bin** | Representación binaria de las transiciones | `10100101` |
+| **Hex** | Hexadecimal agrupado de a 4 bits | `0xA5` |
+| **Dec** | Decimal (hasta 53 bits) | `165` |
+| **Pulse** | Ancho HIGH y LOW del pulso | `H=750.0µs L=250.0µs` |
+| **Duty** | Duty cycle porcentual | `75.0%` |
+
+### Detalles técnicos
+- Usa el **primer canal habilitado** para el análisis
+- El bitstream se genera comprimiendo muestras consecutivas del mismo valor
+- Límite de **64 transiciones** mostradas (con indicador si se excede)
+- El hexadecimal trunca a 12 dígitos si es muy largo
+- El decimal soporta hasta 53 bits (límite de `parseInt` con precisión double)
+- El análisis de pulso mide: ancho HIGH total, ancho LOW total, duty cycle,
+  período promedio entre flancos y frecuencia derivada
+- Los cursores no necesitan estar en orden (A puede estar a la izquierda o derecha de B)
+
+### Casos de uso
+- Verificar tramas digitales manualmente (ej: `10100101` = `0xA5` = 165)
+- Medir anchos de pulso y duty cycle de señales PWM
+- Analizar períodos de reloj entre transiciones
+- Inspeccionar protocolos no soportados por los decodificadores automáticos
+
 ## Agregar decodificadores personalizados
 Los decodificadores son funciones JS registradas en runtime:
 ```javascript

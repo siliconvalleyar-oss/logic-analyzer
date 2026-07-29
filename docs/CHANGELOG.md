@@ -1,5 +1,42 @@
 # Changelog
 
+## [1.6.0] - 2026-07-29
+
+### Added
+- **Pre-Trigger buffer**: Almacena N muestras antes del disparo para ver contexto previo a la condición de trigger
+  - Selector en toolbar: Off / 64 / 128 / 256 / 512 / 1K / 2K / 4K
+  - Zona pre-trigger sombreada en el waveform con línea delimitadora punteada
+  - Control vía WebSocket: comando `set_pretrig` con profundidad en samples
+  - Persistencia en `config.json` (campo `pre_trig_depth`)
+- **Trigger completamente funcional**: Rising, Falling, High, Low, None
+  - Máquina de estados con armado/desarmado en RUN/STOP/SINGLE
+  - Detección por flanco en el polling loop (no post-procesamiento)
+  - Timestamp exacto del punto de trigger para ubicación precisa en el waveform
+  - Marcador "T" rojo con línea vertical sobre el punto de disparo
+- **Decodificación de región seleccionada**: Análisis automático al posicionar cursores A/B
+  - Representación binaria de la señal en la selección
+  - Representación hexadecimal (agrupada de a 4 bits)
+  - Representación decimal (hasta 53 bits)
+  - Análisis de pulso: ancho HIGH, ancho LOW
+  - Duty cycle porcentual
+  - Período promedio y frecuencia
+- **Auto-Fit en primera carga**: Ajuste automático de zoom al recibir datos por primera vez
+  - Resetea al cambiar timebase
+- **WebSocket auto-port**: Conexión WebSocket usando el mismo puerto desde donde se cargó la página
+  - Soporte para `?connect=ws://host:port` URL parameter
+- **Run/Stop cíclico sin bloqueos**: Liberación correcta de recursos en cada ciclo
+  - Desarmado de trigger al pausar
+  - Re-armado al reanudar
+  - Reset pendiente para enviar buffer completo al reconectar
+
+### Fixed
+- **Trigger inactivo**: La lógica de trigger no se aplicaba (todos los modos producían el mismo resultado)
+- **Run/Stop bloqueante**: La segunda ejecución de RUN después de STOP dejaba la aplicación congelada
+- **Renderizado incompleto**: El waveform solo mostraba las primeras muestras del buffer
+- **Puerto WebSocket hardcodeado**: Conexión fallaba cuando el servidor no estaba en puerto 8080
+
+---
+
 ## [1.0.1] - 2026-07-28
 
 ### Added

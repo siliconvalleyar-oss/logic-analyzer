@@ -98,3 +98,53 @@ Cada `states[i]` es un entero donde el bit j corresponde al pin `pins[j]`.
 - SPSC (single producer = thread GPIO, single consumer = thread WebSocket)
 - La web pide la cantidad de muestras que necesita segun timebase
 - Si buffer se llena, descarta las mas viejas (modo roll infinito)
+
+## Pre-Trigger Buffer
+- Buffer adicional (`std::vector<Sample>`) para almacenar muestras previas al disparo
+- Tamaño configurable: 0 (Off) a 4096 muestras (∼8ms a 500 kSps)
+- Funcionamiento circular: cuando se llena, descarta la muestra más antigua
+- Mientras el trigger está armado y no disparado, las muestras van al pre-trigger buffer
+- Al disparar el trigger: se vacía el pre-trigger buffer al buffer principal,
+  luego continúa la captura normal (post-trigger)
+- Thread-safe: `pre_trig_max_` es `std::atomic<size_t>`
+
+## Trigger State Machine
+```
+        (sin trigger configurado)
+     ┌───────────────────────────────────────┐
+     │            RUN/SINGLE                 │
+     ▼                                       │
+┌─────────┐  (trigger config)   ┌──────────┐   fire  ┌──────────┐
+│  IDLE   │ ──────────────────► │  ARMED   │ ──────► │ TRIGGERED│
+│(sin arm)│                     │(acumula  │         │(flushes  │
+└─────────┘                     │ pre-trig)│         │ pre-trig)│
+     ▲                          └──────────┘         └────┬─────┘
+     │                                                     │
+     └───────────────────── STOP ──────────────────────────┘
+```
+- **IDLE**: Sin trigger armado. Si hay trigger configurado y se envía RUN/SINGLE,
+  pasa a ARMED. Si no hay trigger configurado, las muestras van directamente
+  al buffer principal sin pasar por la máquina de estados.
+- **ARMED**: Trigger configurado y esperando condición de disparo.
+  Las muestras se acumulan en el pre-trigger buffer (circular).
+- **TRIGGERED**: Condición de disparo cumplida. El pre-trigger se vuelca al
+  buffer principal y continúa la captura post-trigger normalmente.
+- Al hacer STOP: se desarma el trigger y se vuelve a IDLE.
+- Al hacer RUN/SINGLE: se rearma si hay trigger configurado.
+- El timestamp del trigger se guarda atómicamente y se usa en el broadcast
+  para ubicar el índice exacto dentro del batch de waveform.
+
+### Flujo sin trigger
+Cuando no hay trigger configurado (pin=-1 o type=none):
+1. `trigger_armed_` se mantiene en `false`
+2. Todas las muestras van directamente al buffer principal (sin pre-trigger buffer)
+3. La adquisición comienza inmediatamente al hacer RUN
+
+## Selection Decoding (Análisis con Cursores)
+- Al posicionar los cursores A y B en el waveform, el frontend analiza
+  automáticamente las muestras entre ambos cursores.
+- **Representaciones**: binario, hexadecimal, decimal
+- **Análisis de pulso**: ancho HIGH, ancho LOW, duty cycle, período promedio, frecuencia
+- Usa el primer canal habilitado para el análisis
+- Límite de 64 transiciones mostradas (con indicador si se trunca)
+- Los cursores se posicionan haciendo clic en el waveform y el grid de cursores
