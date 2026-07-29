@@ -5,10 +5,10 @@
 //==============================================================================
 
 #include "server.h"
-#include "websocket.h"
-#include "protocol.h"
-#include "version.h"
-#include "logger.h"
+#include "net/websocket.h"
+#include "core/protocol.h"
+#include "core/version.h"
+#include "core/logger.h"
 
 #include <cstring>
 #include <cstdio>

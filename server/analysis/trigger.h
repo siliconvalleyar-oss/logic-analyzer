@@ -10,7 +10,7 @@
 #include <string>
 #include <cstdint>
 #include <vector>
-#include "ring_buffer.h"
+#include "hardware/ring_buffer.h"
 
 /** Tipos de disparo soportados. */
 enum class TriggerType {

@@ -10,8 +10,8 @@
 #include <string>
 #include <vector>
 #include <cstdint>
-#include "ring_buffer.h"
-#include "trigger.h"
+#include "hardware/ring_buffer.h"
+#include "analysis/trigger.h"
 
 /**
  * Construye un mensaje JSON de tipo "waveform" para enviar por WebSocket.

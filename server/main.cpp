@@ -8,10 +8,10 @@
 #include <iostream>
 #include <atomic>
 
-#include "config.h"
-#include "server.h"
-#include "version.h"
-#include "logger.h"
+#include "core/config.h"
+#include "core/server.h"
+#include "core/version.h"
+#include "core/logger.h"
 
 static std::atomic<bool> g_shutdown(false);
 

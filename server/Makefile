@@ -1,20 +1,22 @@
 # Logic Analyzer Server - Makefile
-# Modular build: main.cpp + gpio + ring_buffer + websocket + sha1 + 
-#                 trigger + protocol + config + logger + server
+# Organizado por capas: core/, hardware/, net/, analysis/
 # Licencia: MIT
 
 CXX      := g++
-CXXFLAGS := -std=c++17 -O3 -Wall -Wextra -pthread
+CXXFLAGS := -std=c++17 -O3 -Wall -Wextra -pthread -I.
 LDFLAGS  := -lpthread
 
-# Source files (all modules)
-SRCS := main.cpp gpio.cpp ring_buffer.cpp websocket.cpp sha1.cpp \
-        trigger.cpp protocol.cpp config.cpp logger.cpp server.cpp
+# Source files by layer
+SRCS := main.cpp \
+        core/server.cpp core/config.cpp core/logger.cpp core/protocol.cpp \
+        hardware/gpio.cpp hardware/ring_buffer.cpp \
+        net/websocket.cpp net/sha1.cpp \
+        analysis/trigger.cpp
+
 OBJS := $(SRCS:.cpp=.o)
 
 # Detect architecture
 UNAME_M := $(shell uname -m)
-UNAME_S := $(shell uname -s)
 
 # On ARM (Raspberry Pi), enable GPIO mmap
 ifneq (,$(findstring arm,$(UNAME_M)))
@@ -24,21 +26,18 @@ ifneq (,$(findstring aarch64,$(UNAME_M)))
     CXXFLAGS += -DGPIO_MMAP=1
 endif
 
-# Target
 TARGET := logic_server
 
 .PHONY: all clean run test test-build docs
 
 all: $(TARGET)
 
-# Link
 $(TARGET): $(OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 	@echo "=== Build complete: $(TARGET) ==="
 	@echo "Architecture: $(UNAME_M)"
 	@echo "GPIO mmap: $(if $(filter arm%,$(UNAME_M)),ENABLED,$(if $(filter aarch64,$(UNAME_M)),ENABLED,DISABLED (simulation)))"
 
-# Compilation rules
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
@@ -47,35 +46,34 @@ run: $(TARGET)
 	@echo "Open http://localhost:8080 in your browser"
 	./$(TARGET) 8080
 
-# Test build (compiles but doesn't run)
 test-build: $(TARGET)
 	@echo "=== Test build: OK ==="
 
-# Quick smoke test
 test: $(TARGET)
 	@echo "=== Running smoke test ==="
 	@timeout 2 ./$(TARGET) --port=8080 2>&1 || true
 	@echo "=== Test complete ==="
 
-# Doxygen documentation
 docs:
 	@echo "Generating documentation..."
 	@which doxygen > /dev/null 2>&1 && doxygen Doxyfile 2>/dev/null || \
-	 echo "Warning: doxygen not installed. Install with: sudo apt install doxygen"
+	 echo "Warning: doxygen not installed"
 	@echo "Docs: docs/doxygen/html/index.html"
 
 clean:
 	rm -f $(OBJS) $(TARGET)
+	rm -rf core/*.o hardware/*.o net/*.o analysis/*.o
 
 # Dependencies
-gpio.o:        gpio.h
-ring_buffer.o: ring_buffer.h
-websocket.o:   websocket.h sha1.h
-sha1.o:        sha1.h
-trigger.o:     trigger.h ring_buffer.h
-protocol.o:    protocol.h ring_buffer.h trigger.h
-config.o:      config.h
-logger.o:      logger.h
-server.o:      server.h gpio.h ring_buffer.h trigger.h config.h \
-              websocket.h protocol.h version.h logger.h
-main.o:        config.h server.h version.h logger.h
+core/config.o:      core/config.h
+core/logger.o:      core/logger.h
+core/protocol.o:    core/protocol.h hardware/ring_buffer.h analysis/trigger.h
+core/server.o:      core/server.h hardware/gpio.h hardware/ring_buffer.h \
+                    analysis/trigger.h core/config.h net/websocket.h \
+                    core/protocol.h core/version.h core/logger.h
+hardware/gpio.o:        hardware/gpio.h
+hardware/ring_buffer.o: hardware/ring_buffer.h
+net/websocket.o:    net/websocket.h net/sha1.h
+net/sha1.o:         net/sha1.h
+analysis/trigger.o: analysis/trigger.h hardware/ring_buffer.h
+main.o:             core/config.h core/server.h core/version.h core/logger.h

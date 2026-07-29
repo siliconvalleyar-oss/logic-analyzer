@@ -14,11 +14,11 @@
 #include <string>
 #include <vector>
 
-#include "gpio.h"
-#include "ring_buffer.h"
-#include "trigger.h"
-#include "config.h"
-#include "websocket.h"
+#include "hardware/gpio.h"
+#include "hardware/ring_buffer.h"
+#include "analysis/trigger.h"
+#include "core/config.h"
+#include "net/websocket.h"
 
 /**
  * Servidor principal del analizador logico.
