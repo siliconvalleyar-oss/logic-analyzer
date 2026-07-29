@@ -487,6 +487,14 @@ html, body {
     font-size:11px; color:#3a3a6a;
     text-align:center;
 }
+.help-footer kbd {
+    display:inline; padding:1px 5px;
+    border-radius:3px;
+    font-size:10px; font-weight:700; font-family:inherit;
+    background:rgba(255,255,255,0.07);
+    color:#6b7a8a;
+    border:1px solid rgba(255,255,255,0.07);
+}
 
 /* ============================================================
    RESPONSIVE
@@ -586,6 +594,7 @@ html, body {
     <button class="cursors" onclick="toggleCursors()" title="Toggle cursors (C)">☰ Cursors<kbd>C</kbd></button>
     <button class="csv"     onclick="exportCSV()" title="Export CSV (E)">📥 CSV<kbd>E</kbd></button>
     <button class="fit"     onclick="resetZoom()" title="Fit to screen (F)">⟲ Fit<kbd>F</kbd></button>
+    <button class="help-btn" onclick="toggleHelp()" title="Keyboard shortcuts ( ? )">❓<kbd>?</kbd></button>
 </div>
 
 <!-- ============================================================
