@@ -77,8 +77,11 @@
 
 - [x] **FIXED**: Reconexion WebSocket duplicaba el estado inicial (connectionId guard + clear data on connect)
 - [x] **FIXED**: En modo simulación, el contador se resetea al reconectar (info-samples actualizado en connect())
-- [x] **FIXED**: El servidor no respondía a RUN tras STOP (pre-trigger depth=0 + binario desactualizado)
 - [x] **FIXED**: Renderizado producía diagonales en vez de escalones digitales (HTML desactualizado en /opt/)
+- [x] **FIXED**: RUN no reanuda tras STOP con trigger (pre-trigger depth=0 + binario viejo)
+- [ ] **DEADLOCK**: STOP deja el servidor inerte (no responde RUN/SINGLE/STOP)
+- [ ] **SINGLE mode**: no muestra nada si el trigger nunca dispara (pre-trigger bloquea el buffer principal)
+- [ ] **Señal incompleta**: en timebases largos (>50ms/div) solo se ve ~20% de la forma de onda
 
 ### ✅ FIXED: Reconexión WebSocket duplica el estado inicial
 
@@ -123,7 +126,48 @@ alrededor de la acumulación pre-trigger + `continue`.
 - **Causa raíz**: `if (pt_max > 0)` faltante → con depth=0 todas las muestras se perdían
   en el pre-trigger buffer
 - **Fix**: `server/core/server.cpp` — rodear bloque pre-trigger con `if (pt_max > 0)`
-  + deploy del binario nuevo a `/opt/`
+
+### 🔴 DEADLOCK: STOP deja el servidor inerte
+
+**Síntoma**: Al presionar STOP la pantalla se congela (correcto), pero RUN/SINGLE no
+responden nunca más. El servidor queda inerte hasta reiniciarlo.
+
+**Causa raíz**: `handle_client_read()` (line 439) lockea `clients_mutex_` y llama a
+`handle_ws_frame()`, que para el comando STOP lockea `clients_mutex_` **nuevamente**
+(line 731). `std::mutex` no es recursivo → **deadlock** inmediato en el hilo de epoll.
+El hilo principal queda trabado para siempre, no procesa más EPOLLIN/EPOLLOUT.
+
+**Fix** (`server/core/server.cpp:730`): Eliminar el `std::lock_guard` redundante en
+el handler de STOP — `clients_mutex_` ya está retenido por `handle_client_read`.
+Además, agregar `single_request_.store(false)` en el handler RUN para limpiar
+un posible SINGLE previo (evita que el broadcast loop re-pause tras RUN).
+
+### 🔴 SINGLE mode: no muestra nada si el trigger no dispara
+
+**Síntoma**: En modo SINGLE con trigger configurado y pre-trigger > 0, no llega
+ninguna muestra al cliente si el trigger nunca se cumple.
+
+**Causa raíz**: En SINGLE mode, el `polling_loop` envía muestras al pre-trigger
+buffer y hace `continue` (saltándose el buffer principal) hasta que el trigger
+dispare y vuelque todas las acumuladas. Si la condición de trigger jamás ocurre
+en la señal de entrada, el buffer principal nunca recibe datos.
+
+**Fix propuesto**: Timeout en SINGLE mode: si pasan N ciclos sin disparo, vaciar
+el pre-trigger al buffer principal igual y pausar. O agregar un watchdog.
+
+### 🔴 Señal incompleta en timebases largos
+
+**Síntoma**: A 500ms/div solo se ve el ~20% inicial de la forma de onda.
+A 100ms/div se ve más (~40%). A 10ms/div se ve completa.
+
+**Causa raíz**: El cliente limita el buffer a `state.maxSamples = 65536`.
+A 500kHz sample rate, 65536 muestras = 131ms de datos. El viewport a
+500ms/div × 10 div = 5000ms necesita ~2.5M muestras para llenarse.
+El buffer del cliente solo tiene 65536 (~2.6% del viewport).
+
+**Fix propuesto**: Aumentar `maxSamples` dinámicamente según el timebase,
+o implementar compresión/decimalización en el servidor para enviar menos
+muestras en timebases lentos (ej: enviar solo transiciones).
 
 ## Mejoras continuas
 

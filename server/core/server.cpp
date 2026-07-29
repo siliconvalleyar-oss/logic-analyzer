@@ -710,6 +710,7 @@ void LogicServer::handle_ws_frame(int fd, const WS_Frame& frame) {
             LOG_INFO("Server", "Cmd: run — resuming");
             paused_.store(false, std::memory_order_release);
             pending_reset_.store(true, std::memory_order_release);
+            single_request_.store(false, std::memory_order_release);
             // Si hay trigger configurado, asegurar que esta armado
             // (bajo mutex para evitar data race con polling_loop)
             {
@@ -726,12 +727,10 @@ void LogicServer::handle_ws_frame(int fd, const WS_Frame& frame) {
             paused_.store(true, std::memory_order_release);
             // Desarmar trigger al pausar
             trigger_armed_.store(false, std::memory_order_release);
-            // Limpiar buffers de salida para pausa instantanea
-            {
-                std::lock_guard<std::mutex> lk(clients_mutex_);
-                for (auto& [fd, st] : clients_) {
-                    st.write_buf.clear();
-                }
+            // Limpiar buffers de salida — ya estamos bajo clients_mutex_
+            // (handle_client_read lockea clients_mutex_ antes de llamarnos).
+            for (auto& [fd, st] : clients_) {
+                st.write_buf.clear();
             }
         } else if (cmd.find("\"single\"") != std::string::npos) {
             LOG_INFO("Server", "Cmd: single — one-shot");
