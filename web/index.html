@@ -206,55 +206,25 @@ html, body {
 #cursor-info .val { color:#c8d6e5; font-weight:600; }
 
 /* ============================================================
-   CONNECTION DIALOG
+   CONNECT BUTTON (inline in topbar)
    ============================================================ */
-#connect-dialog {
-    position:fixed; inset:0; z-index:999;
-    background:rgba(0,0,0,0.7);
-    display:flex; align-items:center; justify-content:center;
-    backdrop-filter:blur(4px);
+#btn-reconnect {
+    background:none; border:1px solid #2a2a5a; border-radius:6px;
+    color:#6b7a8a; font-size:11px; padding:4px 10px;
+    cursor:pointer; font-family:inherit;
+    transition:all 0.2s;
+    display:none;
 }
-#connect-dialog.hidden { display:none; }
-#connect-dialog .card {
-    background:linear-gradient(135deg, #1a1a35, #141428);
-    border:1px solid #2a2a5a; border-radius:16px;
-    padding:32px 40px; max-width:440px; width:90%;
-    box-shadow:0 20px 60px rgba(0,0,0,0.5);
+#btn-reconnect:hover { border-color:#4ECDC4; color:#4ECDC4; background:rgba(78,205,196,0.08); }
+#btn-reconnect.show { display:inline-flex; align-items:center; gap:4px; }
+#reconnect-input {
+    display:none;
+    padding:3px 8px; border:1px solid #2a2a5a; border-radius:4px;
+    background:#0d0d1a; color:#c8d6e5; font-size:11px;
+    width:180px; font-family:inherit;
 }
-#connect-dialog .card h2 {
-    font-size:22px; margin-bottom:6px;
-    background:linear-gradient(90deg, #4ECDC4, #45B7D1);
-    -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-    background-clip:text;
-}
-#connect-dialog .card p {
-    font-size:13px; color:#6b7a8a; margin-bottom:20px;
-}
-#connect-dialog .card label {
-    font-size:12px; color:#c8d6e5; font-weight:600;
-    display:block; margin-bottom:6px;
-}
-#connect-dialog .card input {
-    width:100%; padding:10px 14px;
-    background:#0d0d1a; border:1px solid #2a2a5a; border-radius:8px;
-    color:#c8d6e5; font-size:14px; font-family:inherit;
-    margin-bottom:16px; transition:border-color 0.2s;
-}
-#connect-dialog .card input:focus {
-    outline:none; border-color:#4ECDC4;
-}
-#connect-dialog .card button {
-    width:100%; padding:10px;
-    background:linear-gradient(135deg, #4ECDC4, #45B7D1);
-    border:none; border-radius:8px;
-    color:#fff; font-size:14px; font-weight:700;
-    cursor:pointer; transition:transform 0.2s, box-shadow 0.2s;
-}
-#connect-dialog .card button:hover {
-    transform:translateY(-2px);
-    box-shadow:0 8px 20px rgba(78,205,196,0.3);
-}
-#connect-dialog .card button:active { transform:translateY(0); }
+#reconnect-input.show { display:inline-block; }
+#reconnect-input:focus { outline:none; border-color:#4ECDC4; }
 
 /* ============================================================
    DECODER PANEL
@@ -374,16 +344,7 @@ html, body {
 <!-- ============================================================
      CONNECTION DIALOG
      ============================================================ -->
-<div id="connect-dialog" class="hidden">
-    <div class="card">
-        <h2>🔬 Logic Analyzer</h2>
-        <p>Connect to the C++ server running on your Raspberry Pi or local machine</p>
-        <label for="ws-url">WebSocket URL</label>
-        <input id="ws-url" type="text" value="ws://localhost:8080" placeholder="ws://192.168.1.100:8080">
-        <button onclick="connect()">Connect</button>
-    </div>
-</div>
-
+<!-- No connection dialog — auto-connect is immediate -->
 <!-- ============================================================
      TOP BAR
      ============================================================ -->
@@ -398,6 +359,8 @@ html, body {
         <span id="info-samples">0</span> samples &middot;
         <span id="info-pins">0</span> pins
     </div>
+    <input id="reconnect-input" placeholder="ws://host:8080">
+    <button id="btn-reconnect" onclick="reconnectClick()">⟳ Reconnect</button>
 </div>
 
 <!-- ============================================================
@@ -564,18 +527,11 @@ const labels  = document.getElementById('channel-labels');
 function init() {
     buildChannelList();
     populateTriggerSelect();
-    document.getElementById('ws-url').focus();
 
-    // Auto-connect on Enter
-    document.getElementById('ws-url').addEventListener('keydown', e => {
-        if (e.key === 'Enter') connect();
-    });
-
-    // Check URL param
+    // Check URL param for custom WS URL
     const params = new URLSearchParams(window.location.search);
     if (params.get('connect')) {
-        document.getElementById('ws-url').value = params.get('connect');
-        connect();
+        autoConnectUrl = params.get('connect');
     }
 
     // Resize handling
@@ -647,17 +603,29 @@ function updatePixelsPerUs() {
 // ============================================================
 // WEBSOCKET
 // ============================================================
-function connect() {
-    const url = document.getElementById('ws-url').value.trim();
+// Default URL for auto-connect (can be overridden by ?connect= URL param)
+let autoConnectUrl = null;
+
+function connect(url) {
+    if (!url) {
+        url = `ws://${window.location.hostname}:8080`;
+    }
     if (!url) return;
 
+    // Close existing connection if any
+    if (state.ws) {
+        try { state.ws.close(); } catch(e) {}
+    }
+
     setStatus('connecting');
+    hideReconnectUI();
 
     try {
         state.ws = new WebSocket(url);
     } catch (e) {
         setStatus('disconnected');
         document.getElementById('status-text').textContent = 'Invalid URL';
+        showReconnectUI();
         return;
     }
 
@@ -665,7 +633,7 @@ function connect() {
 
     state.ws.onopen = () => {
         setStatus('connected');
-        document.getElementById('connect-dialog').classList.add('hidden');
+        hideReconnectUI();
     };
 
     state.ws.onmessage = (ev) => {
@@ -684,15 +652,47 @@ function connect() {
         state.decoder.frames = [];
         state.decoder.lastDecodeIdx = 0;
         document.getElementById('decoder-results-inner').innerHTML = '';
-        // Show connect dialog again for reconnection
-        document.getElementById('connect-dialog').classList.remove('hidden');
-        document.getElementById('ws-url').focus();
+        // Auto reconnect after 3 seconds (with guard to prevent stacking)
+        scheduleReconnect();
     };
 
     state.ws.onerror = () => {
         setStatus('disconnected');
         document.getElementById('status-text').textContent = 'Connection error';
+        showReconnectUI();
     };
+}
+
+function showReconnectUI() {
+    document.getElementById('btn-reconnect').classList.add('show');
+    document.getElementById('reconnect-input').classList.add('show');
+    document.getElementById('reconnect-input').value = `ws://${window.location.hostname}:8080`;
+}
+
+function hideReconnectUI() {
+    document.getElementById('btn-reconnect').classList.remove('show');
+    document.getElementById('reconnect-input').classList.remove('show');
+}
+
+function reconnectClick() {
+    const url = document.getElementById('reconnect-input').value.trim();
+    connect(url || `ws://${window.location.hostname}:8080`);
+}
+
+// Guard to prevent multiple reconnect timers stacking
+let reconnectTimer = null;
+function scheduleReconnect() {
+    if (reconnectTimer) return;
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        autoReconnect();
+    }, 3000);
+}
+
+function autoReconnect() {
+    if (!state.connected) {
+        connect(autoConnectUrl || `ws://${window.location.hostname}:8080`);
+    }
 }
 
 function sendCommand(cmd) {
@@ -824,12 +824,7 @@ function toggleCursors() {
     }
 }
 
-function reconnect() {
-    // Re-show the connection dialog
-    document.getElementById('connect-dialog').classList.remove('hidden');
-    document.getElementById('ws-url').focus();
-    setStatus('disconnected');
-}
+// reconnect() removed — toolbar uses reconnectClick() instead
 
 function exportCSV() {
     if (state.timestamps.length === 0) return;
@@ -1916,11 +1911,8 @@ function toggleChannel(idx) {
 // AUTO-CONNECT (try to detect server)
 // ============================================================
 function autoConnect() {
-    const host = window.location.hostname;
-    const port = '8080';
-    const url = `ws://${host}:${port}`;
-    document.getElementById('ws-url').value = url;
-    connect();
+    const url = autoConnectUrl || `ws://${window.location.hostname}:8080`;
+    connect(url);
 }
 
 // Auto-connect immediately (no passwords — local network)
