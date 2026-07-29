@@ -2,35 +2,46 @@
 menu() {
     echo "=== Logic Server Manager ==="
     echo "1) Iniciar manual (./server/logic_server 8080)"
-    echo "2) Iniciar con systemd (servicio permanente)"
-    echo "3) Detener todo (manual + systemd)"
-    echo "4) Estado"
-    echo "5) Salir"
+    echo "2) Iniciar systemd"
+    echo "3) Detener (manual + systemd)"
+    echo "4) Deshabilitar systemd (no arranca solo)"
+    echo "5) Estado"
+    echo "6) Salir"
     read -p "Opcion: " opt
     case $opt in
         1) ./server/logic_server 8080 ;;
         2)
-            sudo systemctl enable logic-analyzer
-            sudo systemctl start logic-analyzer
+            sudo systemctl enable --now logic-analyzer
             echo "Systemd iniciado"
             ;;
         3)
-            sudo systemctl stop logic-analyzer 2>/dev/null
-            sudo killall -9 logic_server 2>/dev/null
+            sudo systemctl stop logic-analyzer
+            sleep 1
+            left=$(pgrep logic_server)
+            if [ -n "$left" ]; then
+                sudo kill -9 $left 2>/dev/null
+            fi
             echo "Detenido"
             ;;
         4)
+            sudo systemctl disable logic-analyzer
+            echo "Systemd deshabilitado"
+            ;;
+        5)
             echo "--- Procesos ---"
-            pgrep -a logic_server || echo "(ninguno)"
+            p=$(pgrep logic_server)
+            if [ -n "$p" ]; then
+                ps -p $p -o pid,cmd --no-headers
+                echo "--- Hilos ---"
+                ps -T -p $p -o pid,tid,comm --no-headers
+            else
+                echo "(ninguno)"
+            fi
             echo "--- Systemd ---"
             sudo systemctl is-active logic-analyzer 2>/dev/null || echo "inactivo"
-            echo "--- Hilos ---"
-            pid=$(pgrep logic_server | head -1)
-            if [ -n "$pid" ]; then
-                ps -T -p $pid -o pid,tid,comm --no-headers
-            fi
+            sudo systemctl is-enabled logic-analyzer 2>/dev/null || echo "deshabilitado"
             ;;
-        5) exit 0 ;;
+        6) exit 0 ;;
         *) echo "Opcion invalida" ;;
     esac
     echo ""
