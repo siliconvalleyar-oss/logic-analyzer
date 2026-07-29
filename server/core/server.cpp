@@ -136,6 +136,14 @@ void LogicServer::polling_loop() {
     auto next = std::chrono::steady_clock::now();
 
     while (running_) {
+        // Si estamos pausados (STOP), no leer GPIO ni llenar buffer
+        // para ahorrar CPU. Dormir 50ms y verificar de nuevo.
+        if (paused_.load(std::memory_order_acquire)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            next = std::chrono::steady_clock::now();
+            continue;
+        }
+
         next += std::chrono::nanoseconds(period_ns);
 
         uint32_t states = gpio_.read_all();
