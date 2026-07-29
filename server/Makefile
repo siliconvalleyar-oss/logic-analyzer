@@ -36,7 +36,7 @@ $(TARGET): $(OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 	@echo "=== Build complete: $(TARGET) ==="
 	@echo "Architecture: $(UNAME_M)"
-	@echo "GPIO mmap: $(if $(findstring arm,$(UNAME_M)),ENABLED,$(if $(findstring aarch64,$(UNAME_M)),ENABLED,DISABLED (simulation)))"
+	@echo "GPIO mmap: $(if $(filter arm%,$(UNAME_M)),ENABLED,$(if $(filter aarch64,$(UNAME_M)),ENABLED,DISABLED (simulation)))"
 
 # Compilation rules
 %.o: %.cpp

@@ -8,6 +8,7 @@
 #include <iostream>
 #include <cstring>
 #include <cstdio>
+#include <cstdlib>
 
 ServerConfig config_parse_args(int argc, char* argv[]) {
     ServerConfig cfg;
