@@ -1876,28 +1876,35 @@ function render(timestamp) {
         ctx.lineWidth = 1.5;
         ctx.beginPath();
 
-        // Estado lógico en el borde izquierdo (sample más cercano a tMin)
-        const s0 = (state.states[drawStart] >> pin) & 1;
-        const y0 = s0 ? yHigh : yLow;
+        // Primer sample visible: su posición y estado lógico
+        const firstT = timeUs[drawStart];
+        const firstX = marginL + ((firstT - tMin) / visibleTime) * plotW;
+        const firstBit = (state.states[drawStart] >> pin) & 1;
+        const firstY = firstBit ? yHigh : yLow;
 
-        // Comenzar desde el borde izquierdo de la ventana
-        ctx.moveTo(leftX, y0);
+        // Arrancar desde el borde izquierdo con el estado del primer sample
+        ctx.moveTo(leftX, firstY);
 
-        // Si no hay suficientes samples, dibujar línea plana y continuar
+        // Si el primer sample está a la derecha del borde, tender puente horizontal
+        if (firstX > leftX) {
+            ctx.lineTo(firstX, firstY);
+        }
+
+        // Si hay menos de 2 samples dibujables, trazar línea plana y continuar
         if (drawEnd - drawStart < 2) {
-            ctx.lineTo(rightX, y0);
+            ctx.lineTo(rightX, firstY);
             ctx.stroke();
             continue;
         }
 
-        // Dibujar todos los samples visibles con optimizacion stair-step
-        // Para señales lentas: si varios samples caen en el mismo pixel,
-        // solo dibujamos el ultimo estado de ese pixel para evitar
-        // sobrecarga de lineTo() y obtener escalones perfectos.
-        let prevBit = s0;
-        let lastPxX = -1;
+        // Stair-step digital: HORIZONTAL + VERTICAL, nunca diagonal
+        // Para cada sample i (desde el segundo en adelante):
+        //   1) línea HORIZONTAL desde (prevX, prevY) hasta (xi, prevY)
+        //   2) si cambió el estado: línea VERTICAL desde (xi, prevY) hasta (xi, yi)
+        let prevBit = firstBit;
+        let prevY = firstY;
 
-        for (let i = drawStart; i < drawEnd; i++) {
+        for (let i = drawStart + 1; i < drawEnd; i++) {
             const t = timeUs[i];
             const x = marginL + ((t - tMin) / visibleTime) * plotW;
             if (x < leftX) continue;
@@ -1905,29 +1912,20 @@ function render(timestamp) {
 
             const bit = (state.states[i] >> pin) & 1;
             const y = bit ? yHigh : yLow;
-            const pxX = Math.round(x);
 
-            if (pxX !== lastPxX) {
-                // Cambio de columna de pixel: dibujar la transicion
-                if (bit !== prevBit) {
-                    ctx.lineTo(x, prevBit ? yHigh : yLow);
-                    ctx.lineTo(x, y);
-                    prevBit = bit;
-                } else {
-                    ctx.lineTo(x, y);
-                }
-                lastPxX = pxX;
-            } else if (bit !== prevBit) {
-                // Cambio de estado dentro del mismo pixel:
-                // dibujar la transicion igual (transicion sub-pixel)
-                ctx.lineTo(x, prevBit ? yHigh : yLow);
+            // Escalon: extender estado anterior HORIZONTALMENTE hasta x
+            ctx.lineTo(x, prevY);
+
+            // Si hubo transición, línea VERTICAL en x
+            if (bit !== prevBit) {
                 ctx.lineTo(x, y);
                 prevBit = bit;
             }
+            prevY = y;
         }
 
-        // Extender hasta el borde derecho con el último estado
-        ctx.lineTo(rightX, prevBit ? yHigh : yLow);
+        // Extender el último estado hasta el borde derecho
+        ctx.lineTo(rightX, prevY);
 
         ctx.stroke();
     }    // === DRAW TRIGGER MARKER + PRE-TRIGGER ZONE ===

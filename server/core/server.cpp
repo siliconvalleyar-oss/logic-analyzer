@@ -217,9 +217,12 @@ void LogicServer::polling_loop() {
                         LOG_INFO("Trigger", "Fired! GPIO%d state=%d  pre=%zu samples",
                                  trigger_pin, cur, pre_trig_buffer_.size());
 
-                        // 1) Volcar pre-trigger al buffer principal
-                        for (auto& s : pre_trig_buffer_) {
-                            buffer_.push(s.timestamp_ns, s.gpio_state);
+                        // 1) Volcar pre-trigger al buffer principal (solo en SINGLE,
+                        //    donde las muestras NO fueron al buffer principal)
+                        if (single_request_.load(std::memory_order_acquire)) {
+                            for (auto& s : pre_trig_buffer_) {
+                                buffer_.push(s.timestamp_ns, s.gpio_state);
+                            }
                         }
                         pre_trig_buffer_.clear();
                         in_pre_trig = false;
@@ -227,23 +230,27 @@ void LogicServer::polling_loop() {
                         // El push del sample de disparo lo hace el push general
                         // de abajo, para evitar duplicar
                     } else {
-                        // No ha disparado: acumular en pre-trigger buffer
-                        {
-                            const size_t pt_max = pre_trig_max_.load(std::memory_order_acquire);
-                            if (pt_max > 0 && pre_trig_buffer_.size() >= pt_max) {
+                        // No ha disparado: acumular en pre-trigger buffer (si depth > 0)
+                        const size_t pt_max = pre_trig_max_.load(std::memory_order_acquire);
+                        if (pt_max > 0) {
+                            if (pre_trig_buffer_.size() >= pt_max) {
                                 pre_trig_buffer_.erase(pre_trig_buffer_.begin());
                             }
-                        }
-                        pre_trig_buffer_.push_back({ts, states});
-                        in_pre_trig = true;
+                            pre_trig_buffer_.push_back({ts, states});
+                            in_pre_trig = true;
 
-                        // Esperar y saltar push a buffer principal
-                        auto now = std::chrono::steady_clock::now();
-                        while (now < next) {
-                            std::this_thread::yield();
-                            now = std::chrono::steady_clock::now();
+                            // En SINGLE mode: bloquear buffer principal hasta que dispare
+                            // En RUN mode: dejar fluir muestras al buffer principal
+                            if (single_request_.load(std::memory_order_acquire)) {
+                                auto now = std::chrono::steady_clock::now();
+                                while (now < next) {
+                                    std::this_thread::yield();
+                                    now = std::chrono::steady_clock::now();
+                                }
+                                continue;
+                            }
                         }
-                        continue;
+                        // pt_max == 0 ó RUN mode: dejar caer al push general
                     }
                 }
             } else {
