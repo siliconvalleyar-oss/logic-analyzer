@@ -845,6 +845,10 @@ function updatePixelsPerUs() {
 // ============================================================
 // Default URL for auto-connect (can be overridden by ?connect= URL param)
 let autoConnectUrl = null;
+// Connection counter: each connect() call increments this.
+// WS event handlers capture the value at creation time so stale
+// handlers (from previous connections) are ignored.
+let wsConnectionId = 0;
 
 function connect(url) {
     if (!url) {
@@ -855,14 +859,29 @@ function connect(url) {
 
     // Close existing connection if any
     if (state.ws) {
+        // Disconnect handler deactivated: set state to null so old onclose is ignored
+        state.ws.onclose = null;
+        state.ws.onmessage = null;
+        state.ws.onerror = null;
         try { state.ws.close(); } catch(e) {}
     }
+
+    // Clear stale waveform data from previous connection
+    state.timestamps = [];
+    state.states = [];
+    state.timeUsCache = [];
+    state.triggerIndex = -1;
 
     setStatus('connecting');
     hideReconnectUI();
 
+    // Unique connection ID so we can ignore stale events
+    const myId = ++wsConnectionId;
+
+    let ws;
     try {
-        state.ws = new WebSocket(url);
+        ws = new WebSocket(url);
+        state.ws = ws;
     } catch (e) {
         setStatus('disconnected');
         document.getElementById('status-text').textContent = 'Invalid URL';
@@ -870,14 +889,16 @@ function connect(url) {
         return;
     }
 
-    state.ws.binaryType = 'arraybuffer';
+    ws.binaryType = 'arraybuffer';
 
-    state.ws.onopen = () => {
+    ws.onopen = () => {
+        if (myId !== wsConnectionId) return; // stale connection
         setStatus('connected');
         hideReconnectUI();
     };
 
-    state.ws.onmessage = (ev) => {
+    ws.onmessage = (ev) => {
+        if (myId !== wsConnectionId) return; // stale connection
         try {
             const msg = JSON.parse(ev.data);
             handleMessage(msg);
@@ -886,7 +907,8 @@ function connect(url) {
         }
     };
 
-    state.ws.onclose = () => {
+    ws.onclose = () => {
+        if (myId !== wsConnectionId) return; // stale connection
         setStatus('disconnected');
         state.connected = false;
         // Clear decoder state on disconnect
@@ -898,7 +920,8 @@ function connect(url) {
         scheduleReconnect();
     };
 
-    state.ws.onerror = () => {
+    ws.onerror = () => {
+        if (myId !== wsConnectionId) return; // stale connection
         setStatus('disconnected');
         document.getElementById('status-text').textContent = 'Connection error';
         showReconnectUI();
@@ -934,11 +957,15 @@ function scheduleReconnect() {
 }
 
 function autoReconnect() {
-    if (!state.connected) {
+    // No auto-reconnect if already connected or currently connecting
+    if (!state.connected &&
+        (!state.ws || state.ws.readyState > WebSocket.OPEN)) {
         const port = window.location.port || '80';
         connect(autoConnectUrl || `ws://${window.location.hostname}:${port}`);
     }
 }
+
+
 
 function sendCommand(cmd) {
     if (state.ws && state.ws.readyState === WebSocket.OPEN) {

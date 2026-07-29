@@ -75,70 +75,31 @@
 
 ## Bugs conocidos
 
-- [ ] Reconexion WebSocket a veces duplica el estado inicial
+- [x] **FIXED**: Reconexion WebSocket duplicaba el estado inicial (connectionId guard + clear data on connect)
 - [ ] En modo simulacion, el contador se resetea al reconectar
-- [ ] El servidor no responde a `{"cmd":"stop"}` (siempre streaming)
+- [x] **FIXED**: El servidor no respondía a RUN tras STOP (pre-trigger depth=0 + binario desactualizado en /opt/)
 
-### BUG CRITICO: Renderizado produce diagonales en vez de escalones digitales
+### ✅ FIXED: Renderizado produce diagonales en vez de escalones digitales
 
-**Sintoma**: Las señales digitales se dibujan con líneas diagonales/rampas en vez de
-escalones rectangulares (solo segmentos H y V).
+**Solución**: El renderizado stair-step ya existía en `web/index.html` del repo, pero el
+servicio systemd servía un HTML viejo (cacheado en el binario de las 07:15). Se copió el
+HTML actualizado a `/opt/logic-analyzer/server/web/` y se reinició el servicio.
 
-**Causa raíz**: El algoritmo stair-step en `web/index.html:1865-1932` tiene dos problemas:
-1. La optimización por columna de píxel (`if (pxX !== lastPxX)`) salta muestras que
-   caen en el mismo píxel, perdiendo transiciones de estado que ocurren a alta velocidad.
-   Cuando se retoma en un nuevo píxel, `ctx.lineTo(x, y)` conecta desde la última
-   posición conocida, creando diagonales si hubo transiciones intermedias perdidas.
-2. `ctx.moveTo(leftX, y0)` coloca el lápiz en el margen izquierdo con el estado de la
-   primera muestra. Si hay un gap temporal grande entre muestras, la línea horizontal
-   desde `leftX` al primer sample visible es correcta, pero cuando se combina con el
-   problema #1 se generan diagonales.
+- **Causa raíz**: Binario desactualizado en `/opt/logic-analyzer/server/logic_server`
+  (no reflejaba las compilaciones en `/home/joy/src/logic-analyzer/server/`)
+- **Fix**: `sudo cp .../web/index.html /opt/logic-analyzer/server/web/` + `sudo systemctl restart`
 
-**Fix requerido**: Reescribir el renderizado con el algoritmo clásico de stair-step:
-```
-for cada par (i, i+1):
-  línea horizontal de (t_i, s_i) a (t_{i+1}, s_i)
-  if s_i != s_{i+1}: línea vertical de (t_{i+1}, s_i) a (t_{i+1}, s_{i+1})
-```
-Eliminar la optimización por píxel. Usar `ctx.beginPath()` por canal y dibujar
-cada segmento explícitamente sin depender de `moveTo` en el borde izquierdo.
+### ✅ FIXED: RUN no reanuda adquisición tras STOP (cuando hay trigger configurado)
 
-### BUG CRITICO: RUN no reanuda adquisición tras STOP (cuando hay trigger configurado)
+**Solución**: El `polling_loop` acumulaba muestras en el pre-trigger buffer con `continue`
+incluso cuando `pre_trig_depth = 0` (Off). Con `pt_max = 0`, el buffer secundario nunca
+se llenaba y jamás se vaciaba al buffer principal. Se agregó guarda `if (pt_max > 0)`
+alrededor de la acumulación pre-trigger + `continue`.
 
-**Sintoma**: STOP funciona (el log muestra "Cmd: stop — pausing"), pero al presionar
-RUN nunca vuelven a llegar datos al cliente. Es necesario reiniciar el servicio.
-
-**Causa raíz**: En `server.cpp:handle_ws_frame`, el comando RUN rearma el trigger:
-```cpp
-if (trigger_.pin >= 0 && trigger_.type != TriggerType::NONE) {
-    trigger_armed_.store(true, ...);
-    trigger_triggered_.store(false, ...);
-}
-```
-Esto causa que el polling loop entre al bloque de pre-trigger (`server.cpp:163`):
-`trigger_armed_=true && !trigger_triggered_` → todas las muestras van al
-pre-trigger buffer con `continue` saltándose `buffer_.push()`.
-Si la condición de trigger nunca ocurre (o no ocurre inmediatamente), el buffer
-principal permanece vacío y el cliente no recibe datos.
-
-**Flujo del bug**:
-```
-RUN → trigger se arma → polling loop envía muestras al pre-trigger buffer
-                        (buffer principal vacío) → broadcast loop no encuentra datos
-                        → cliente ve pantalla congelada
-
-STOP → paused_=true → polling loop duerme
-
-RUN → paused_=false, trigger se RE-ARMA → mismo problema: pre-trigger intercepta todo
-```
-
-**Fix requerido**: En modo RUN (no SINGLE), las muestras deben ir SIEMPRE al buffer
-principal. El pre-trigger buffer debe ser un mecanismo separado que solo acumula
-para determinar la posición del trigger, sin interceptar el flujo de datos.
-
-Solución: eliminar el `continue` en el bloque "not fired" del trigger
-(`server.cpp:245`), o mejor, usar `single_request_` como guarda: solo hacer
-pre-trigger blocking en modo SINGLE, no en RUN.
+- **Causa raíz**: `if (pt_max > 0)` faltante → con depth=0 todas las muestras se perdían
+  en el pre-trigger buffer
+- **Fix**: `server/core/server.cpp` — rodear bloque pre-trigger con `if (pt_max > 0)`
+  + deploy del binario nuevo a `/opt/`
 
 ## Mejoras continuas
 
