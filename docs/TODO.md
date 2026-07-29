@@ -77,7 +77,7 @@
 
 Ver [`BUGS.md`](BUGS.md) para el tracking completo con causas raíz, fixes y estado actual.
 
-**Resumen**: 10 bugs identificados, 8 cerrados, 2 abiertos.
+**Resumen**: 10 bugs identificados, 9 cerrados, 1 abierto.
 
 ## Mejoras continuas
 

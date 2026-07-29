@@ -12,8 +12,8 @@
 | 6 | Reconexión WS duplica estado inicial | ✅ FIXED | MEDIUM | `index.html` — connectionId guard |
 | 7 | Contador simulación se resetea al reconectar | ✅ FIXED | LOW | `index.html` — DOM update en connect() |
 | 8 | Debug logging síncrono en hot path | ✅ FIXED | LOW | `server_manager.sh` — flag `--quiet` |
-| — | SINGLE mode con trigger no dispara | 🔴 OPEN | HIGH | Pendiente watchdog timeout |
-| — | Zoom/pan no se restaura al reconectar | 🔴 OPEN | LOW | Pendiente |
+| 9 | SINGLE timeout 1s (sin condición) | ✅ FIXED | HIGH | `server.cpp` — timeout 1s en polling_loop |
+| 10 | Zoom/pan no se restaura al reconectar | 🔴 OPEN | LOW | Pendiente |
 
 ---
 
@@ -185,18 +185,47 @@ nivel mínimo de log, eliminando los `LOG_INFO` en producción.
 
 ## Bugs OPEN
 
-### BUG-9: SINGLE mode con trigger no dispara (sin condición de trigger)
+### BUG-9: SINGLE timeout 1s — forzar captura si el trigger no dispara
 
 **Síntoma**: SINGLE + trigger configurado + señal que nunca cumple la
-condición de trigger → SINGLE nunca se completa, el cliente no recibe datos.
+condición de trigger → SINGLE nunca se completa.
 
 **Causa**: El pre-trigger buffer bloquea el buffer principal hasta que
-el trigger dispare. Si la condición nunca se cumple, el bloqueo es
-permanente (en SINGLE mode).
+el trigger dispare mediante `if (single_request_) { continue; }`. Si
+la condición nunca se cumple, el bloqueo es permanente.
 
-**Fix propuesto**: Timeout en SINGLE mode (ej: 1 segundo sin disparo →
-forzar captura). O watchdog que cuente ciclos sin disparo y vueque el
-pre-trigger al buffer principal igual.
+**Fix** (`server/core/server.cpp:252-281`): Agregar timeout de 1 segundo:
+1. Se registra `single_start_time` cuando la espera comienza.
+2. Cada iteración compara `elapsed >= 1s`.
+3. Al cumplirse: `trigger_triggered_ = true`, se vacía el pre-trigger
+   buffer al buffer principal, y se deja fluir al `buffer_.push()` general.
+4. `single_request_` NO se limpia aquí — el `broadcast_loop` detecta
+   `single_mode=true` + `trigger_triggered_=true` y pausa el sistema.
+5. Además, se corrigió un bug existente: el pre-trigger flush en el
+   `if (fire)` normal usaba `single_request_.load()` DESPUÉS de limpiarlo
+   (siempre falso). Se guarda `was_single` antes de limpiar.
+
+```diff
+ // Antes: espera infinita
+-if (single_request_) {
+-    while (now < next) { yield; }
+-    continue;
+-}
++// Después: timeout 1s
++if (single_request_) {
++    if (single_start_time == time_point{}) {
++        single_start_time = now();
++    }
++    if (elapsed >= 1s) {
++        trigger_triggered_ = true;
++        // single_request_ queda true → broadcast loop pausa
++        flush pre-trigger al buffer principal;
++    } else {
++        while (now < next) { yield; }
++        continue;
++    }
++}
+```
 
 ### BUG-10: Zoom/pan no se restaura al reconectar
 
@@ -222,3 +251,4 @@ si el estado `_applyViewportOnConnect` no está correctamente seteado.
 | 2026-07-29 | BUG-6: WS reconnect | `web/index.html` | — |
 | 2026-07-29 | BUG-7: Contador sim | `web/index.html` | — |
 | 2026-07-29 | BUG-8: Debug flag | `server_manager.sh` | — |
+| 2026-07-30 | BUG-9: SINGLE timeout | `server/core/server.cpp` | `0d0b344` |
