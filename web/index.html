@@ -1364,7 +1364,7 @@ function handleKeyDown(e) {
             break;
         case 't':
             e.preventDefault();
-            if (state.decoder.active && state.decoder.type !== 'none') {
+            if (state.decoder.active) {
                 // Alternar panel del decodificador
                 const panel = document.getElementById('decoder-config');
                 const results = document.getElementById('decoder-results');
