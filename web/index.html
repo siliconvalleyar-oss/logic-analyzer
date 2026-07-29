@@ -152,6 +152,41 @@ html, body {
 }
 #channel-labels::-webkit-scrollbar { width:3px; }
 #channel-labels::-webkit-scrollbar-thumb { background:#2a2a4a; border-radius:3px; }
+
+#channel-panel {
+    display:flex; flex-direction:column;
+    width:130px; min-width:130px;
+    border-right:1px solid #1e1e3a;
+}
+#channel-panel > #channel-labels {
+    width:100%; min-width:0;
+    border-right:none;
+    flex:1;
+}
+
+#ch-buttons {
+    display:flex; gap:4px;
+    padding:4px 8px;
+    border-bottom:1px solid rgba(255,255,255,0.06);
+    background:rgba(255,255,255,0.02);
+}
+#ch-buttons button {
+    flex:1; padding:3px 6px;
+    font-size:10px; font-weight:600;
+    border:1px solid #2a2a4a; border-radius:4px;
+    background:linear-gradient(180deg, #1a1a30, #12122a);
+    color:#6b7a8a; cursor:pointer;
+    font-family:inherit;
+    transition:all 0.2s;
+}
+#ch-buttons button:hover {
+    border-color:#4ECDC4; color:#4ECDC4;
+    background:rgba(78,205,196,0.08);
+}
+#ch-buttons button.off:hover {
+    border-color:#FF6B6B; color:#FF6B6B;
+    background:rgba(255,107,107,0.08);
+}
 .channel-label {
     height:36px; display:flex; align-items:center;
     padding:0 8px 0 12px; cursor:pointer;
@@ -342,7 +377,8 @@ html, body {
    RESPONSIVE
    ============================================================ */
 @media (max-width:768px) {
-    #channel-labels { width:90px; min-width:90px; }
+    #channel-panel { width:90px; min-width:90px; }
+    #channel-labels { width:100%; min-width:0; }
     #channel-labels .chan-name { width:40px; font-size:10px; }
     #infobar { left:90px; font-size:10px; gap:8px; }
     #topbar { gap:8px; padding:6px 10px; }
@@ -440,7 +476,13 @@ html, body {
      MAIN AREA
      ============================================================ -->
 <div id="main-container">
-    <div id="channel-labels"></div>
+    <div id="channel-panel">
+        <div id="ch-buttons">
+            <button onclick="enableAllChannels(true)" title="Enable all channels">◉ All</button>
+            <button class="off" onclick="enableAllChannels(false)" title="Disable all channels">◌ None</button>
+        </div>
+        <div id="channel-labels"></div>
+    </div>
     <div id="waveform-container">
         <canvas id="waveform-canvas"></canvas>
         <div id="cursor-info">
@@ -2098,6 +2140,17 @@ function capDecoderFrames() {
 // ============================================================
 // CHANNEL TOGGLE
 // ============================================================
+function enableAllChannels(enabled) {
+    for (let i = 0; i < MAX_PINS; i++) {
+        state.channelEnabled[i] = enabled;
+        const labels = document.querySelectorAll('.channel-label');
+        if (labels[i]) {
+            labels[i].style.opacity = enabled ? '1' : '0.3';
+        }
+    }
+    sendEnabledPinsToServer();
+}
+
 function toggleChannel(idx) {
     state.channelEnabled[idx] = !state.channelEnabled[idx];
     const labels = document.querySelectorAll('.channel-label');
