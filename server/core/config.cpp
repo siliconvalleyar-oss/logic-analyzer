@@ -163,6 +163,26 @@ ServerConfig config_load_file(const std::string& filepath) {
         }
     }
 
+    // decoder_config JSON string (capturar hasta el final del objeto)
+    {
+        size_t p = json.find("\"decoder\"");
+        if (p != std::string::npos) {
+            p = json.find(':', p) + 1;
+            while (p < json.size() && (json[p]==' '||json[p]=='\t')) p++;
+            // Capturar todo el objeto JSON hasta el } de cierre, contando anidacion
+            if (p < json.size() && json[p] == '{') {
+                int depth = 0;
+                size_t start = p;
+                while (p < json.size()) {
+                    if (json[p] == '{') depth++;
+                    else if (json[p] == '}') { depth--; if (depth == 0) { p++; break; } }
+                    p++;
+                }
+                cfg.decoder_config_json = json.substr(start, p - start);
+            }
+        }
+    }
+
     return cfg;
 }
 
@@ -188,6 +208,10 @@ bool config_save_file(const ServerConfig& cfg, const std::string& filepath) {
         json += std::to_string(cfg.enabled_pins[i]);
     }
     json += "],\n";
+    // Decoder config (si no esta vacio)
+    if (!cfg.decoder_config_json.empty()) {
+        json += "  \"decoder\": " + cfg.decoder_config_json + ",\n";
+    }
     // Labels
     json += "  \"labels\": {\n";
     {

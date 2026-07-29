@@ -390,11 +390,14 @@ void LogicServer::handle_http(int fd, ClientState& c,
                 ep_json += std::to_string(config_.enabled_pins[i]);
             }
             ep_json += "]";
+            // Decoder config: usar string guardado o "null"
+            std::string dec_json = config_.decoder_config_json.empty() ? "null" : config_.decoder_config_json;
             c.write_buf += ws_encode_text(proto_build_config(
                 config_.timebase_us, config_.trigger_pin,
                 config_.trigger_type,
                 proto_build_labels_json(config_.channel_labels),
                 ep_json,
+                dec_json,
                 pins_json()));
         }
         c.state = ClientState::WS_CONNECTED;
@@ -500,6 +503,26 @@ void LogicServer::handle_ws_frame(int fd, const WS_Frame& frame) {
             }
             config_save_file(config_);
             LOG_INFO("Server", "Enabled pins updated (%zu enabled)", config_.enabled_pins.size());
+        } else if (cmd.find("\"set_decoder\"") != std::string::npos) {
+            // Extraer el objeto decoder completo del comando
+            // Formato: {"cmd":"set_decoder","config":{...objeto decoder...}}
+            config_.decoder_config_json = "";
+            size_t pos = cmd.find("\"config\"");
+            if (pos != std::string::npos) {
+                pos = cmd.find('{', pos);
+                if (pos != std::string::npos) {
+                    int depth = 0;
+                    size_t start = pos;
+                    while (pos < cmd.size()) {
+                        if (cmd[pos] == '{') depth++;
+                        else if (cmd[pos] == '}') { depth--; if (depth == 0) { pos++; break; } }
+                        pos++;
+                    }
+                    config_.decoder_config_json = cmd.substr(start, pos - start);
+                }
+            }
+            config_save_file(config_);
+            LOG_INFO("Server", "Decoder config saved");
         } else if (cmd.find("\"save_config\"") != std::string::npos) {
             LOG_INFO("Server", "Saving config to config.json");
             config_save_file(config_);

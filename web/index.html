@@ -838,6 +838,31 @@ function handleMessage(msg) {
                 }
             }
         }
+        if (msg.decoder && typeof msg.decoder === 'object') {
+            // Restaurar config del decodificador
+            if (msg.decoder.type) {
+                state.decoder.type = msg.decoder.type;
+                state.decoder.active = (msg.decoder.type !== 'none');
+            }
+            if (msg.decoder.pins) {
+                for (const [key, val] of Object.entries(msg.decoder.pins)) {
+                    if (key in state.decoder.pins) state.decoder.pins[key] = val;
+                }
+            }
+            if (msg.decoder.opts) {
+                for (const [key, val] of Object.entries(msg.decoder.opts)) {
+                    if (key in state.decoder.config) state.decoder.config[key] = val;
+                }
+            }
+            // Re-aplicar UI del decodificador para reflejar pines y opciones
+            if (state.decoder.active && state.decoder.type !== 'none') {
+                const sel = document.getElementById('decoder-select');
+                if (sel) {
+                    sel.value = state.decoder.type;
+                    decoderSelect(state.decoder.type);
+                }
+            }
+        }
         if (msg.enabled_pins && Array.isArray(msg.enabled_pins)) {
             // Array vacio = todos habilitados (default)
             if (msg.enabled_pins.length > 0) {
@@ -1455,11 +1480,27 @@ const DECODER_PIN_CONFIGS = {
 };
 
 // --- Decoder selection ---
+function sendDecoderToServer() {
+    if (!state.connected) return;
+    // Enviar config completa del decodificador al servidor
+    const decConfig = {
+        cmd: 'set_decoder',
+        config: {
+            type: state.decoder.type,
+            pins: Object.assign({}, state.decoder.pins),
+            opts: Object.assign({}, state.decoder.config)
+        }
+    };
+    sendCommand(decConfig);
+}
+
 function decoderSelect(type) {
     state.decoder.type = type;
     state.decoder.frames = [];
     state.decoder.lastDecodeIdx = state.timestamps.length;
     state.decoder.active = (type !== 'none');
+
+    sendDecoderToServer();
 
     const panel = document.getElementById('decoder-config');
     const inner = document.getElementById('decoder-config-inner');
@@ -1518,6 +1559,7 @@ function decoderSetPin(id, gpio) {
     state.decoder.frames = [];
     state.decoder.lastDecodeIdx = 0;
     document.getElementById('decoder-results-inner').innerHTML = '';
+    sendDecoderToServer();
     runDecoder();
 }
 
@@ -1533,6 +1575,7 @@ function decoderSetOpt(id, val) {
     state.decoder.frames = [];
     state.decoder.lastDecodeIdx = 0;
     document.getElementById('decoder-results-inner').innerHTML = '';
+    sendDecoderToServer();
     runDecoder();
 }
 

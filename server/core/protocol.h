@@ -52,6 +52,7 @@ std::string proto_build_config(int timebase_us, int trigger_pin,
                                const std::string& trigger_type,
                                const std::string& labels_json = "{}",
                                const std::string& enabled_pins_json = "[]",
+                               const std::string& decoder_json = "null",
                                const std::string& pins_json = "[]");
 
 /**
