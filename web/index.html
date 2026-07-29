@@ -69,7 +69,14 @@ html, body {
 #status-info {
     font-size:12px; color:#6b7a8a;
     margin-left:auto; white-space:nowrap;
+    display:inline-flex; align-items:center; gap:8px;
 }
+#saving-indicator {
+    font-size:11px; color:#45B7D1; font-weight:600;
+    opacity:0; transition:opacity 0.3s ease;
+    pointer-events:none;
+}
+#saving-indicator.show { opacity:1; }
 
 /* ============================================================
    TOOLBAR
@@ -449,6 +456,7 @@ html, body {
         <span id="info-rate">—</span> &middot;
         <span id="info-samples">0</span> samples &middot;
         <span id="info-pins">0</span> pins
+        <span id="saving-indicator"></span>
     </div>
     <input id="reconnect-input" placeholder="ws://host:8080">
     <button id="btn-reconnect" onclick="reconnectClick()">⟳ Reconnect</button>
@@ -810,7 +818,23 @@ function autoReconnect() {
 function sendCommand(cmd) {
     if (state.ws && state.ws.readyState === WebSocket.OPEN) {
         state.ws.send(JSON.stringify(cmd));
+        // Mostrar indicador Saving para comandos de configuracion
+        if (cmd && cmd.cmd && cmd.cmd.startsWith('set_')) {
+            showSaving();
+        }
     }
+}
+
+let savingTimer = null;
+function showSaving() {
+    const el = document.getElementById('saving-indicator');
+    if (!el) return;
+    el.textContent = '💾 Saving…';
+    el.classList.add('show');
+    clearTimeout(savingTimer);
+    savingTimer = setTimeout(() => {
+        el.classList.remove('show');
+    }, 1000);
 }
 
 function setStatus(status) {
