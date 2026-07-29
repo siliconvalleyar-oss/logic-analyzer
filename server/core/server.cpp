@@ -932,34 +932,39 @@ void LogicServer::close_client_locked(int fd,
 //------------------------------------------------------------------------------
 
 std::string LogicServer::get_html_page() {
+    // std::call_once garantiza que la carga del HTML ocurra una sola vez,
+    // incluso si multiples threads llaman a get_html_page() simultaneamente.
+    // La variable 'cached' se inicializa una vez y luego solo se lee.
     static std::string cached;
-    if (!cached.empty()) return cached;
-
-    // Rutas absolutas primero (cuando se ejecuta via systemd),
-    // luego relativas (para desarrollo local).
-    const char* paths[] = {
-        "/opt/logic-analyzer/server/web/index.html",
-        "web/index.html", "../web/index.html", "./web/index.html"
-    };
-    for (auto p : paths) {
-        FILE* f = fopen(p, "rb");
-        if (f) {
-            fseek(f, 0, SEEK_END);
-            long len = ftell(f);
-            fseek(f, 0, SEEK_SET);
-            cached.resize(len);
-            if (fread(&cached[0], 1, len, f) != (size_t)len) {
-                LOG_WARN("Server", "Failed to read HTML: %s (expected %ld bytes)", p, len);
+    static std::once_flag html_loaded;
+    std::call_once(html_loaded, [&]() {
+        // Rutas absolutas primero (cuando se ejecuta via systemd),
+        // luego relativas (para desarrollo local).
+        const char* paths[] = {
+            "/opt/logic-analyzer/server/web/index.html",
+            "web/index.html", "../web/index.html", "./web/index.html"
+        };
+        for (auto p : paths) {
+            FILE* f = fopen(p, "rb");
+            if (f) {
+                fseek(f, 0, SEEK_END);
+                long len = ftell(f);
+                fseek(f, 0, SEEK_SET);
+                cached.resize(len);
+                if (fread(&cached[0], 1, len, f) != (size_t)len) {
+                    LOG_WARN("Server", "Failed to read HTML: %s (expected %ld bytes)", p, len);
+                }
+                fclose(f);
+                LOG_INFO("Server", "Loaded HTML: %s (%ld bytes)", p, len);
+                return;
             }
-            fclose(f);
-            LOG_INFO("Server", "Loaded HTML: %s (%ld bytes)", p, len);
-            return cached;
         }
-    }
-    LOG_WARN("Server", "web/index.html not found");
-    return "<html><body style='background:#111;color:#eee;font-family:sans-serif;"
-           "display:flex;align-items:center;justify-content:center;height:100vh;'>"
-           "<h1>Logic Analyzer</h1><p>web/index.html not found</p></body></html>";
+        LOG_WARN("Server", "web/index.html not found");
+        cached = "<html><body style='background:#111;color:#eee;font-family:sans-serif;"
+                 "display:flex;align-items:center;justify-content:center;height:100vh;'>"
+                 "<h1>Logic Analyzer</h1><p>web/index.html not found</p></body></html>";
+    });
+    return cached;
 }
 
 //------------------------------------------------------------------------------
