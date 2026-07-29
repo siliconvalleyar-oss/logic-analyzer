@@ -276,7 +276,7 @@ void LogicServer::handle_http(int fd, ClientState& c,
 
     if (method != "GET") {
         std::string r = "HTTP/1.1 405 Method Not Allowed\r\nContent-Length:0\r\n\r\n";
-        write(fd, r.data(), r.size());
+        if (write(fd, r.data(), r.size()) < 0) { /* client gone */ }
         close_client_locked(fd, it);
         return;
     }
@@ -302,7 +302,7 @@ void LogicServer::handle_http(int fd, ClientState& c,
             "HTTP/1.1 101 Switching Protocols\r\n"
             "Upgrade: websocket\r\nConnection: Upgrade\r\n"
             "Sec-WebSocket-Accept: " + accept + "\r\n\r\n";
-        write(fd, resp.data(), resp.size());
+        if (write(fd, resp.data(), resp.size()) < 0) { /* client gone */ }
 
         c.state = ClientState::WS_CONNECTED;
         c.read_buf.clear();
@@ -325,11 +325,11 @@ void LogicServer::handle_http(int fd, ClientState& c,
 
 void LogicServer::handle_ws_frame(int fd, const WS_Frame& frame) {
     if (frame.opcode == WS_CLOSE) {
-        write(fd, ws_encode_close().data(), ws_encode_close().size());
+        if (write(fd, ws_encode_close().data(), ws_encode_close().size()) < 0) { /* ignore */ }
         close_client(fd);
     } else if (frame.opcode == WS_PING) {
         std::string pong = ws_encode_pong(frame.payload);
-        write(fd, pong.data(), pong.size());
+        if (write(fd, pong.data(), pong.size()) < 0) { /* ignore */ }
     } else if (frame.opcode == WS_TEXT) {
         const std::string& cmd = frame.payload;
         if (cmd.find("\"set_trigger\"") != std::string::npos) {
@@ -382,7 +382,7 @@ void LogicServer::serve_html(int fd) {
         "Cache-Control: no-cache, no-store, must-revalidate\r\n"
         "Connection: close\r\n"
         "Access-Control-Allow-Origin: *\r\n\r\n" + html;
-    write(fd, resp.data(), resp.size());
+    if (write(fd, resp.data(), resp.size()) < 0) { /* client gone */ }
 }
 
 //------------------------------------------------------------------------------
@@ -421,7 +421,9 @@ std::string LogicServer::get_html_page() {
             long len = ftell(f);
             fseek(f, 0, SEEK_SET);
             cached.resize(len);
-            fread(&cached[0], 1, len, f);
+            if (fread(&cached[0], 1, len, f) != (size_t)len) {
+                LOG_WARN("Server", "Failed to read HTML: %s (expected %ld bytes)", p, len);
+            }
             fclose(f);
             LOG_INFO("Server", "Loaded HTML: %s (%ld bytes)", p, len);
             return cached;
