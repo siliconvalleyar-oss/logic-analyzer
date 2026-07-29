@@ -19,7 +19,7 @@
  * Version menor. Se incrementa con nuevas funcionalidades
  * compatibles hacia atras.
  */
-#define LOGIC_VERSION_MINOR 1
+#define LOGIC_VERSION_MINOR 4
 
 /**
  * @def LOGIC_VERSION_PATCH
@@ -34,6 +34,6 @@
  * y en los mensajes de log de inicio.
  * Formato: "MAJOR.MINOR.PATCH"
  */
-#define LOGIC_VERSION_STRING "1.1.0"
+#define LOGIC_VERSION_STRING "1.4.0"
 
 #endif // LOGIC_VERSION_H
