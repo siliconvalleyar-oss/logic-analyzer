@@ -21,6 +21,7 @@ UNAME_M := $(shell uname -m)
 # On ARM (Raspberry Pi), enable GPIO mmap
 ifneq (,$(findstring arm,$(UNAME_M)))
     CXXFLAGS += -DGPIO_MMAP=1
+    LDFLAGS  += -latomic
 endif
 ifneq (,$(findstring aarch64,$(UNAME_M)))
     CXXFLAGS += -DGPIO_MMAP=1

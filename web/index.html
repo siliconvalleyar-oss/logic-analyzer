@@ -534,7 +534,7 @@ html, body {
         <span id="info-pins">0</span> pins
         <span id="saving-indicator"></span>
     </div>
-    <input id="reconnect-input" placeholder="ws://host:8080">
+    <input id="reconnect-input" placeholder="ws://host:PORT">
     <button id="btn-reconnect" onclick="reconnectClick()">⟳ Reconnect</button>
 </div>
 
@@ -848,7 +848,8 @@ let autoConnectUrl = null;
 
 function connect(url) {
     if (!url) {
-        url = `ws://${window.location.hostname}:8080`;
+        const port = window.location.port || '80';
+        url = `ws://${window.location.hostname}:${port}`;
     }
     if (!url) return;
 
@@ -907,7 +908,8 @@ function connect(url) {
 function showReconnectUI() {
     document.getElementById('btn-reconnect').classList.add('show');
     document.getElementById('reconnect-input').classList.add('show');
-    document.getElementById('reconnect-input').value = `ws://${window.location.hostname}:8080`;
+    const wsPort = window.location.port || '80';
+    document.getElementById('reconnect-input').value = `ws://${window.location.hostname}:${wsPort}`;
 }
 
 function hideReconnectUI() {
@@ -917,7 +919,8 @@ function hideReconnectUI() {
 
 function reconnectClick() {
     const url = document.getElementById('reconnect-input').value.trim();
-    connect(url || `ws://${window.location.hostname}:8080`);
+    const port = window.location.port || '80';
+    connect(url || `ws://${window.location.hostname}:${port}`);
 }
 
 // Guard to prevent multiple reconnect timers stacking
@@ -932,7 +935,8 @@ function scheduleReconnect() {
 
 function autoReconnect() {
     if (!state.connected) {
-        connect(autoConnectUrl || `ws://${window.location.hostname}:8080`);
+        const port = window.location.port || '80';
+        connect(autoConnectUrl || `ws://${window.location.hostname}:${port}`);
     }
 }
 
@@ -2725,7 +2729,8 @@ function sendEnabledPinsToServer() {
 // AUTO-CONNECT (try to detect server)
 // ============================================================
 function autoConnect() {
-    const url = autoConnectUrl || `ws://${window.location.hostname}:8080`;
+    const port = window.location.port || '80';
+    const url = autoConnectUrl || `ws://${window.location.hostname}:${port}`;
     connect(url);
 }
 

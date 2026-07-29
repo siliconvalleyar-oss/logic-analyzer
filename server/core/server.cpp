@@ -38,7 +38,8 @@ static const int ALL_GPIO_PINS[MAX_GPIO_PINS] = {
 
 LogicServer::LogicServer(const ServerConfig& config)
     : config_(config)
-    , buffer_(config_.buffer_size) {
+    , buffer_(config_.buffer_size)
+    , pre_trig_max_{(size_t)config_.pre_trig_depth} {
 }
 
 LogicServer::~LogicServer() { stop(); }
@@ -743,7 +744,9 @@ void LogicServer::handle_ws_frame(int fd, const WS_Frame& frame) {
             int depth = proto_extract_int(cmd, "depth", (int)PRE_TRIG_DEFAULT);
             if (depth < 0) depth = 0;
             pre_trig_max_.store((size_t)depth, std::memory_order_release);
-            LOG_INFO("Pre-trigger", "Depth set to %zu samples", (size_t)depth);
+            config_.pre_trig_depth = depth;
+            config_save_file(config_);
+            LOG_INFO("Pre-trigger", "Depth set to %zu samples — config saved", (size_t)depth);
         } else if (cmd.find("\"set_viewport\"") != std::string::npos) {
             // {"cmd":"set_viewport","zoom":1.5,"pan":123.0}
             float zoom = (float)proto_extract_int(cmd, "zoom", 100) / 100.0f;

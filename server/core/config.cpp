@@ -175,6 +175,9 @@ ServerConfig config_load_file(const std::string& filepath) {
         }
     }
 
+    // pre_trig_depth
+    cfg.pre_trig_depth = extract("pre_trig_depth", 512);
+
     // trigger_type string
     {
         size_t p = json.find("\"trigger_type\"");
@@ -230,6 +233,7 @@ bool config_save_file(const ServerConfig& cfg, const std::string& filepath) {
     json += "  \"timebase_us\": " + std::to_string(cfg.timebase_us) + ",\n";
     json += "  \"pin\": "         + std::to_string(cfg.trigger_pin) + ",\n";
     json += "  \"trigger_type\": \"" + cfg.trigger_type + "\",\n";
+    json += "  \"pre_trig_depth\": " + std::to_string(cfg.pre_trig_depth) + ",\n";
     // Enabled pins
     json += "  \"enabled_pins\": [";
     for (size_t i = 0; i < cfg.enabled_pins.size(); i++) {

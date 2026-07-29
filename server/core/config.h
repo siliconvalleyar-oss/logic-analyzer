@@ -49,6 +49,9 @@ struct ServerConfig {
     float   zoom_level     = 1.0f;  ///< Nivel de zoom (1.0 = default)
     float   pan_x          = 0.0f;  ///< Desplazamiento horizontal en microsegundos
 
+    // Pre-trigger
+    int     pre_trig_depth = 512;    ///< Muestras pre-trigger (0 = off)
+
     // Trigger
     int     trigger_pin    = -1;     ///< Pin GPIO para trigger (-1 = desactivado)
     std::string trigger_type = "rising"; ///< rising, falling, both, high, low

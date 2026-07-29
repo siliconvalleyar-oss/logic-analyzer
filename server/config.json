@@ -1,0 +1,14 @@
+{
+  "http_port": 8081,
+  "rate_hz": 500000,
+  "buffer_size": 65536,
+  "timebase_us": 500000,
+  "pin": -1,
+  "trigger_type": "rising",
+  "enabled_pins": [],
+  "zoom_level": 1.000000,
+  "pan_x": 0.000000,
+  "labels": {
+
+  }
+}
