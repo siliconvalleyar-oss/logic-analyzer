@@ -1,7 +1,11 @@
 //==============================================================================
 // sha1.h
-// Implementacion SHA-1 (RFC 3174) para handshake WebSocket
+// SHA-1 hash usando OpenSSL (libcrypto) para handshake WebSocket
 // Licencia: MIT
+//
+// NOTA: Se reemplazo la implementacion custom buggada (SHA1 incorrecto
+// para mensajes > 3 bytes) por OpenSSL, que esta disponible tanto en
+// Raspberry Pi OS como en Ubuntu/Debian con libssl-dev instalado.
 //==============================================================================
 
 #ifndef LOGIC_SHA1_H
@@ -9,61 +13,51 @@
 
 #include <cstdint>
 #include <cstring>
+#include <openssl/sha.h>
 
 /**
- * SHA-1 hash calculator (RFC 3174).
+ * SHA-1 hash calculator (wrapper sobre OpenSSL).
  *
- * Implementacion minimalista de SHA-1 usada exclusivamente
+ * Implementacion de SHA-1 usada exclusivamente
  * para el handshake WebSocket (Sec-WebSocket-Accept).
  *
- * @note No es una implementacion general-purpose. Solo soporta
- *       el flujo: reset() -> update() -> final().
+ * @note Es un wrapper sobre la implementacion SHA-1 de OpenSSL,
+ *       que sigue el estandar FIPS 180-4 / RFC 3174.
+ *       Llamado Sha1 en vez de SHA1 para evitar conflicto con
+ *       la funcion SHA1() de OpenSSL (one-shot convenience).
  */
-struct SHA1 {
-    uint32_t state[5];
-    uint64_t count;
-    uint8_t  buffer[64];
+struct Sha1 {
+    SHA_CTX ctx;
 
     /**
      * Construye un contexto SHA-1 y lo inicializa.
-     *
-     * @note  Es equivalente a llamar SHA1() seguido de reset().
-     * @see   reset()
      */
-    SHA1() { reset(); }
+    Sha1() { reset(); }
 
     /**
      * Inicializa (o reinicia) el contexto de hash.
-     *
-     * Pone los 5 registros de estado a los valores iniciales
-     * del SHA-1 (H0=0x67452301, etc.) y resetea el contador
-     * de bytes a cero.
-     *
-     * @note  Llamar reset() entre distintos mensajes. No es
-     *        necesario llamarlo antes del primer uso porque
-     *        el constructor ya lo hace.
-     *
-     * @see   SHA1(), update(), final()
      */
-    void reset();
+    void reset() {
+        SHA1_Init(&ctx);
+    }
 
     /**
      * Alimenta datos al hash.
      * @param data  Puntero a los datos
      * @param len   Longitud en bytes
      */
-    void update(const uint8_t* data, size_t len);
+    void update(const uint8_t* data, size_t len) {
+        SHA1_Update(&ctx, data, len);
+    }
 
     /**
      * Finaliza el calculo y escribe el digest de 20 bytes.
      * @param digest  Buffer de salida (debe tener capacidad para
      *                20 bytes = 160 bits del SHA-1)
      */
-    void final(uint8_t digest[20]);
-
-private:
-    void transform(const uint8_t* block);
-    static uint32_t rotl(uint32_t x, uint32_t n);
+    void final(uint8_t digest[20]) {
+        SHA1_Final(digest, &ctx);
+    }
 };
 
 #endif // LOGIC_SHA1_H

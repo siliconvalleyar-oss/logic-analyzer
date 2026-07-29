@@ -26,7 +26,7 @@
  * Patch level. Se incrementa con correcciones de bugs
  * o mejoras menores de rendimiento.
  */
-#define LOGIC_VERSION_PATCH 0
+#define LOGIC_VERSION_PATCH 1
 
 /**
  * @def LOGIC_VERSION_STRING
@@ -34,6 +34,6 @@
  * y en los mensajes de log de inicio.
  * Formato: "MAJOR.MINOR.PATCH"
  */
-#define LOGIC_VERSION_STRING "1.4.0"
+#define LOGIC_VERSION_STRING "1.4.1"
 
 #endif // LOGIC_VERSION_H

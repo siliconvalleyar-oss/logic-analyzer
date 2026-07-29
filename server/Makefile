@@ -4,7 +4,7 @@
 
 CXX      := g++
 CXXFLAGS := -std=c++17 -O3 -Wall -Wextra -pthread -I.
-LDFLAGS  := -lpthread
+LDFLAGS  := -lpthread -lcrypto
 
 # Source files by layer
 SRCS := main.cpp \
