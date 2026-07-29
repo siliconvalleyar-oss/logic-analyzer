@@ -362,11 +362,22 @@ void LogicServer::broadcast_loop() {
             samples, pj, config_.sample_rate_hz, trig_idx, need_reset);
         std::string frame = ws_encode_text(json);
 
+        // Per-client write buffer cap: si supera 1MB, descartar datos viejos
+        // para evitar que un cliente lento acumule 58MB+ y agote la RAM.
+        static constexpr size_t MAX_WRITE_BUF = 1048576;  // 1MB
         std::lock_guard<std::mutex> lk(clients_mutex_);
         for (auto& [fd, st] : clients_) {
             if (st.state == ClientState::WS_CONNECTED) {
                 bool was_empty = st.write_buf.empty();
-                st.write_buf += frame;
+                if (st.write_buf.size() > MAX_WRITE_BUF) {
+                    // Cliente lento: descartar buffer viejo y reemplazar
+                    // con el frame actual (keep latest data)
+                    LOG_WARN("Server", "Client %d slow: dropping %zu bytes",
+                             fd, st.write_buf.size());
+                    st.write_buf = frame;
+                } else {
+                    st.write_buf += frame;
+                }
                 if (was_empty) set_writable(fd);
             }
         }
