@@ -74,6 +74,7 @@ bool config_save_file(const ServerConfig& cfg, const std::string& filepath = "co
  *   @c -c, --config FILE     Archivo de configuracion
  *   @c --simulate            Modo simulacion
  *   @c -v, --verbose         Log verboso (DEBUG)
+ *   @c -q, --quiet           Modo silencioso (solo ERROR/FATAL)
  *   @c -l, --log FILE        Archivo de log
  *   @c --version             Muestra version y sale
  *   @c --help                Muestra esta ayuda y sale
@@ -100,6 +101,7 @@ ServerConfig config_load_file(const std::string& filepath);
  *   @c -c, --config FILE     Archivo de configuracion
  *   @c --simulate            Modo simulacion (sin GPIO)
  *   @c -v, --verbose         Log verboso (DEBUG)
+ *   @c -q, --quiet           Modo silencioso (solo ERROR/FATAL)
  *   @c -l, --log FILE        Archivo de log
  *   @c --version             Muestra version y sale
  *   @c --help                Muestra esta ayuda y sale

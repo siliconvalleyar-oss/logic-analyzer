@@ -1,7 +1,17 @@
 #!/bin/bash
+
+DEBUG_FLAG=""
+
 menu() {
+    local debug_str
+    if [ -n "$DEBUG_FLAG" ]; then
+        debug_str="SIN debug (quiet)"
+    else
+        debug_str="CON debug"
+    fi
     echo "=== Logic Server Manager ==="
-    echo "1) Iniciar manual (./server/logic_server 8080)"
+    echo "1a) Iniciar manual (./server/logic_server 8080) — $debug_str"
+    echo "1b) Alternar debug / quiet"
     echo "2) Iniciar systemd"
     echo "3) Detener (manual + systemd)"
     echo "4) Deshabilitar systemd (no arranca solo)"
@@ -9,7 +19,23 @@ menu() {
     echo "6) Salir"
     read -p "Opcion: " opt
     case $opt in
-        1) ./server/logic_server 8080 ;;
+        1a|1)
+            if [ -f ./server/logic_server ]; then
+                echo "Iniciando: ./server/logic_server 8080 $DEBUG_FLAG"
+                ./server/logic_server 8080 $DEBUG_FLAG
+            else
+                echo "Binario no encontrado en ./server/logic_server"
+            fi
+            ;;
+        1b)
+            if [ -z "$DEBUG_FLAG" ]; then
+                DEBUG_FLAG="--quiet"
+                echo "Modo cambiado a: SIN debug (quiet)"
+            else
+                DEBUG_FLAG=""
+                echo "Modo cambiado a: CON debug"
+            fi
+            ;;
         2)
             sudo systemctl enable --now logic-analyzer
             echo "Systemd iniciado"

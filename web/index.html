@@ -871,6 +871,7 @@ function connect(url) {
     state.states = [];
     state.timeUsCache = [];
     state.triggerIndex = -1;
+    document.getElementById('info-samples').textContent = '0';
 
     setStatus('connecting');
     hideReconnectUI();

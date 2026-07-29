@@ -31,6 +31,8 @@ ServerConfig config_parse_args(int argc, char* argv[]) {
             cfg.simulate = true;
         } else if (arg == "-v" || arg == "--verbose") {
             cfg.log_level = "DEBUG";
+        } else if (arg == "-q" || arg == "--quiet") {
+            cfg.log_level = "ERROR";
         } else if (arg == "-l" || arg == "--log") {
             if (i + 1 < argc) cfg.log_file = argv[++i];
         } else if (arg == "--version") {
@@ -281,7 +283,8 @@ void config_print_help(const char* name) {
               << "  -c, --config <file>   Config file (default: config.json)\n"
               << "  -r, --rate <hz>       Sample rate (default: 500000)\n"
               << "  --simulate            Simulation mode (no GPIO)\n"
-              << "  -v, --verbose         Verbose logging\n"
+              << "  -v, --verbose         Verbose logging (DEBUG level)\n"
+              << "  -q, --quiet           Quiet mode (only ERROR/FATAL)\n"
               << "  -l, --log <file>      Log file path\n"
               << "  --version             Show version\n"
               << "  --help                Show this help\n";

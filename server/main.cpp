@@ -29,6 +29,15 @@ int main(int argc, char* argv[]) {
 
     // Inicializar logging
     Logger::init(config.log_file);
+    // Aplicar nivel de log desde config
+    {
+        LogLevel lvl = LOG_INFO;
+        if      (config.log_level == "DEBUG") lvl = LOG_DEBUG;
+        else if (config.log_level == "WARN")  lvl = LOG_WARN;
+        else if (config.log_level == "ERROR") lvl = LOG_ERROR;
+        else if (config.log_level == "FATAL") lvl = LOG_FATAL;
+        Logger::set_min_level(lvl);
+    }
     LOG_INFO("Main", "Logic Analyzer Server v%s starting...",
              LOGIC_VERSION_STRING);
 

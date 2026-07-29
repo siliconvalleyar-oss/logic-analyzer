@@ -76,8 +76,32 @@
 ## Bugs conocidos
 
 - [x] **FIXED**: Reconexion WebSocket duplicaba el estado inicial (connectionId guard + clear data on connect)
-- [ ] En modo simulacion, el contador se resetea al reconectar
-- [x] **FIXED**: El servidor no respondía a RUN tras STOP (pre-trigger depth=0 + binario desactualizado en /opt/)
+- [x] **FIXED**: En modo simulación, el contador se resetea al reconectar (info-samples actualizado en connect())
+- [x] **FIXED**: El servidor no respondía a RUN tras STOP (pre-trigger depth=0 + binario desactualizado)
+- [x] **FIXED**: Renderizado producía diagonales en vez de escalones digitales (HTML desactualizado en /opt/)
+
+### ✅ FIXED: Reconexión WebSocket duplica el estado inicial
+
+**Solución**: Se agregó un contador `wsConnectionId` que se incrementa en cada `connect()`.
+Los handlers `onopen`, `onmessage`, `onclose`, `onerror` capturan el `myId` al crearse y
+verifican `if (myId !== wsConnectionId) return;` para ignorar eventos de conexiones
+obsoletas. Además, se anulan los handlers viejos antes de cerrar el WS previo.
+
+- **Causa raíz**: Múltiples conexiones WS simultáneas alimentando datos al mismo
+  `state.timestamps`/`state.states`. El flag `pending_reset_` del servidor es global
+  y solo lo consume una conexión, las demás reciben datos sin `reset: true`.
+- **Fix**: `web/index.html` — `wsConnectionId` + nullificar handlers viejos + clear data
+
+### ✅ FIXED: En modo simulación el contador se resetea al reconectar
+
+**Solución**: Al limpiar los datos viejos en `connect()`, se actualiza inmediatamente
+el elemento `#info-samples` a `"0"` en lugar de dejar el valor stale hasta que llegue
+el primer mensaje `waveform` del servidor.
+
+- **Causa raíz**: `connect()` limpiaba `state.timestamps = []` pero no actualizaba
+  el DOM. Entre la reconexión y la llegada del primer batch de datos, `info-samples`
+  seguía mostrando el valor anterior (stale).
+- **Fix**: Agregar `document.getElementById('info-samples').textContent = '0'` en `connect()`
 
 ### ✅ FIXED: Renderizado produce diagonales en vez de escalones digitales
 
@@ -103,6 +127,7 @@ alrededor de la acumulación pre-trigger + `continue`.
 
 ## Mejoras continuas
 
+- [ ] Flag `--quiet` / `--verbose` al arrancar: controlar `Logger::min_level_` (ej: LOG_WARN en producción, LOG_DEBUG en debug). El logger sincrónico (`fputs` + `std::cerr` por cada `LOG_INFO`) suma latencia en `handle_client_write` (~30 calls/seg).
 - [ ] Agregar `static_assert` para tamanos de struct
 - [ ] Reemplazar `std::map` con `std::unordered_map` en clientes
 - [ ] Usar memory pool para evitar allocaciones en polling loop
