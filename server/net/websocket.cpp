@@ -11,9 +11,8 @@
 static const char B64[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-static const char* WS_MAGIC = "258EAFA5-E914-47DA-95CA-5AB9DC11B85B";
-// GUID correcto de RFC 6455. No confundir con el typo comun
-// "5AB9DC11B85B" (invalido). El correcto es "C5AB0DC85B11".
+static const char* WS_MAGIC = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+// GUID correcto de RFC 6455. NO usar "5AB9DC11B85B" (comun typo invalido).
 
 static std::string base64_encode(const uint8_t* data, size_t len) {
     std::string r;
@@ -110,7 +109,7 @@ std::string ws_encode_pong(const std::string& payload) {
 
 std::string ws_compute_accept_key(const std::string& client_key) {
     std::string concat = client_key + WS_MAGIC;
-    SHA1 sha;
+    Sha1 sha;
     sha.update((const uint8_t*)concat.data(), concat.size());
     uint8_t digest[20];
     sha.final(digest);
