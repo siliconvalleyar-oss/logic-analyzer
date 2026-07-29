@@ -12,10 +12,18 @@
 #include <vector>
 #include <atomic>
 
-/** Una muestra de GPIO con timestamp. */
+/**
+ * Una muestra de GPIO con timestamp.
+ *
+ * Representa el estado de todos los pines GPIO en un instante
+ * de tiempo. Usada por RingBuffer para la comunicacion entre
+ * el thread de adquisicion y el thread de broadcast.
+ *
+ * @see RingBuffer
+ */
 struct Sample {
-    uint64_t timestamp_ns;  ///< Timestamp en nanosegundos
-    uint32_t gpio_state;    ///< Bitfield: bit N = estado del GPIO N
+    uint64_t timestamp_ns;  ///< Timestamp absoluto en nanosegundos (clock_gettime)
+    uint32_t gpio_state;    ///< Bitfield: bit N = estado del GPIO N (0=low, 1=high)
 };
 
 /**
@@ -33,19 +41,47 @@ public:
 
     /**
      * Agrega una muestra al buffer (productor).
-     * Si el buffer esta lleno, sobrescribe la muestra mas antigua.
-     * @param ts    Timestamp en nanosegundos
-     * @param state Bitfield de estados GPIO
+     *
+     * Si el buffer esta lleno, sobrescribe la muestra mas antigua
+     * (comportamiento circular). No bloquea nunca.
+     *
+     * @param ts    Timestamp en nanosegundos (de clock_gettime)
+     * @param state Bitfield de estados GPIO (bit N = pin N)
+     *
+     * @note  Solo debe ser llamado desde un solo thread (productor).
+     *        No es thread-safe para multiples productores.
+     *
+     * @see   drain(), size()
      */
     void push(uint64_t ts, uint32_t state);
 
     /**
      * Extrae todas las muestras disponibles (consumidor).
-     * @return Vector con las muestras desde la ultima lectura
+     *
+     * Lee el indice atomico de lectura, copia todas las muestras
+     * desde la ultima lectura hasta write_idx_, y actualiza
+     * read_idx_. Operacion O(n) donde n = muestras disponibles.
+     *
+     * @return Vector con todas las muestras desde la ultima llamada
+     *         a drain(). Vacio si no hay muestras nuevas.
+     *
+     * @note  Solo debe ser llamado desde un solo thread (consumidor).
+     *        No es thread-safe para multiples consumidores.
+     *
+     * @see   push(), size()
      */
     std::vector<Sample> drain();
 
-    /** @return Cantidad de muestras disponibles para leer. */
+    /**
+     * Cantidad de muestras disponibles para leer.
+     *
+     * @return Numero de muestras entre read_idx_ y write_idx_,
+     *         en el rango [0, capacity_]
+     *
+     * @note  Es una estimacion atomica. El valor exacto puede
+     *        cambiar inmediatamente despues por una llamada
+     *        concurrente a push() desde otro thread.
+     */
     size_t size() const;
 
 private:

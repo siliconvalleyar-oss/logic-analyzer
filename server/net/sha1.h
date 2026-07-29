@@ -24,9 +24,27 @@ struct SHA1 {
     uint64_t count;
     uint8_t  buffer[64];
 
+    /**
+     * Construye un contexto SHA-1 y lo inicializa.
+     *
+     * @note  Es equivalente a llamar SHA1() seguido de reset().
+     * @see   reset()
+     */
     SHA1() { reset(); }
 
-    /** Inicializa (o reinicia) el contexto de hash. */
+    /**
+     * Inicializa (o reinicia) el contexto de hash.
+     *
+     * Pone los 5 registros de estado a los valores iniciales
+     * del SHA-1 (H0=0x67452301, etc.) y resetea el contador
+     * de bytes a cero.
+     *
+     * @note  Llamar reset() entre distintos mensajes. No es
+     *        necesario llamarlo antes del primer uso porque
+     *        el constructor ya lo hace.
+     *
+     * @see   SHA1(), update(), final()
+     */
     void reset();
 
     /**
@@ -38,7 +56,8 @@ struct SHA1 {
 
     /**
      * Finaliza el calculo y escribe el digest de 20 bytes.
-     * @param digest[20] Buffer de salida (20 bytes)
+     * @param digest  Buffer de salida (debe tener capacidad para
+     *                20 bytes = 160 bits del SHA-1)
      */
     void final(uint8_t digest[20]);
 

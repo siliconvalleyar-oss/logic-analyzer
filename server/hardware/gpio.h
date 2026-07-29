@@ -19,27 +19,77 @@
  */
 class GPIOReader {
 public:
+    /**
+     * Construye un lector GPIO.
+     *
+     * No abre el hardware inmediatamente. Llamar a init()
+     * antes de usar read_all().
+     *
+     * @see init()
+     */
     GPIOReader();
+
+    /**
+     * Destructor. Cierra el mmap y el fd si estaban abiertos.
+     *
+     * @note  Seguro llamarlo aunque init() no se haya llamado
+     *        o haya fallado (fd_ = -1, gpio_map_ = nullptr).
+     * @see close()
+     */
     ~GPIOReader();
 
     /**
      * Inicializa el acceso a GPIO.
-     * En RPi: abre /dev/gpiomem y mapea los registros.
-     * En x86: activa modo simulacion.
-     * @return true si se inicio correctamente
+     *
+     * En RPi: abre /dev/gpiomem y mapea los registros GPIO
+     *         en memoria (mmap).
+     * En x86: activa modo simulacion con contador interno.
+     *
+     * @return true si se inicio correctamente,
+     *         false si no se pudo abrir /dev/gpiomem
+     *
+     * @throws std::system_error si mmap() falla
+     *
+     * @note  Solo llamar una vez. Llamadas multiples no tienen efecto.
+     * @see   GPIOReader(), read_all()
      */
     bool init();
 
     /**
      * Lee el estado de todos los pines GPIO (0-31) en un solo acceso.
-     * @return Bitfield: bit N = estado del GPIO N (0=low, 1=high)
+     *
+     * En RPi: lee el registro GPLEV0 via mmap (~50ns).
+     * En x86: genera un contador de simulacion.
+     *
+     * @return Bitfield: bit N = estado del GPIO N (0=low, 1=high).
+     *         Los bits 28-31 son zero (solo GPIO 0-27 validos).
+     *
+     * @pre   init() debe haberse llamado y retornado true.
+     * @see   init()
      */
     uint32_t read_all();
 
-    /** @return true si esta en modo simulacion (sin hardware GPIO). */
+    /**
+     * Indica si el lector esta en modo simulacion.
+     *
+     * @return true si NO hay acceso a hardware GPIO real,
+     *         false si usa mmap a /dev/gpiomem
+     *
+     * @see   mode_string()
+     */
     bool is_simulation() const;
 
-    /** @return Descripcion del modo actual. */
+    /**
+     * Descripcion textual del modo de operacion actual.
+     *
+     * Ejemplos:
+     *   - "GPIO mmap (Raspberry Pi)"
+     *   - "Simulation mode (no GPIO hardware)"
+     *
+     * @return String descriptivo del modo
+     *
+     * @see   is_simulation()
+     */
     std::string mode_string() const;
 
 private:

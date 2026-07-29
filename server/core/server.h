@@ -45,11 +45,35 @@ public:
 
     /**
      * Inicia el servidor (bloqueante, corre hasta stop()).
-     * @return true si se inicio correctamente
+     *
+     * Crea el socket TCP, inicia epoll, lanza los threads de
+     * adquisicion y broadcast, y entra en el bucle principal
+     * de eventos epoll.
+     *
+     * @return true si el servidor se inicio correctamente,
+     *         false si hubo error en bind/listen/epoll_create
+     *
+     * @throws std::system_error si epoll_wait() falla
+     *                           durante la ejecucion
+     *
+     * @note  Corre en el thread principal (bloqueante).
+     *        Para detenerlo, llamar a stop() desde otro thread
+     *        o manejador de senal.
+     * @see   stop(), main_loop()
      */
     bool start();
 
-    /** Solicita el cierre del servidor. */
+    /**
+     * Solicita el cierre ordenado del servidor.
+     *
+     * Marca running_ = false, lo que causa que el bucle epoll
+     * en start() termine. Los threads de adquisicion y
+     * broadcast se unen en el destructor.
+     *
+     * @note  Es segura para llamar desde un manejador de senal
+     *        (SIGINT, SIGTERM) o desde otro thread.
+     * @see   start(), ~LogicServer()
+     */
     void stop();
 
 private:
@@ -81,7 +105,19 @@ private:
                              std::map<int, ClientState>::iterator& it);
 
     std::string get_html_page();
+    /**
+     * Genera un JSON con la lista de pines configurados.
+     * Formato: "[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,
+     *           17,18,19,20,21,22,23,24,25,26,27]"
+     * @return String JSON con el array de pines GPIO
+     */
     std::string pins_json() const;
+
+    /**
+     * Genera el string de version del servidor.
+     * Formato: "Logic Analyzer v1.x.x"
+     * @return String con nombre y version del servidor
+     */
     std::string version_string() const;
 
     // Config
