@@ -104,6 +104,30 @@ html, body {
 #toolbar button.single:hover { background:rgba(255,234,167,0.15); }
 #toolbar button.active  { background:rgba(78,205,196,0.2); border-color:#4ECDC4; }
 
+/* Keyboard shortcut badges on toolbar buttons */
+#toolbar button kbd {
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:16px; height:16px; padding:0 4px;
+    border-radius:3px;
+    font-size:10px; font-weight:700; font-family:inherit;
+    line-height:1;
+    background:rgba(255,255,255,0.08);
+    color:rgba(255,255,255,0.35);
+    border:1px solid rgba(255,255,255,0.08);
+    margin-left:4px;
+    transition:all 0.2s;
+}
+#toolbar button:hover kbd {
+    background:rgba(255,255,255,0.12);
+    color:rgba(255,255,255,0.5);
+    border-color:rgba(255,255,255,0.15);
+}
+#toolbar button kbd.key-hint-active {
+    background:rgba(78,205,196,0.2);
+    color:#4ECDC4;
+    border-color:rgba(78,205,196,0.3);
+}
+
 .toolbar-sep { width:1px; height:24px; background:#2a2a4a; margin:0 4px; }
 
 #toolbar select {
@@ -418,9 +442,9 @@ html, body {
      TOOLBAR
      ============================================================ -->
 <div id="toolbar">
-    <button class="run active"    onclick="setMode('run')">▶ RUN</button>
-    <button class="stop"          onclick="setMode('stop')">■ STOP</button>
-    <button class="single"        onclick="setMode('single')">⚡ SINGLE</button>
+    <button class="run active"    onclick="setMode('run')">▶ RUN<kbd>R</kbd></button>
+    <button class="stop"          onclick="setMode('stop')">■ STOP<kbd>S</kbd></button>
+    <button class="single"        onclick="setMode('single')">⚡ SINGLE<kbd>N</kbd></button>
     <span id="pause-badge"><span id="pause-icon">⏸</span> PAUSED · <span id="pause-samples">0</span> samples</span>
 
     <div class="toolbar-sep"></div>
@@ -607,6 +631,9 @@ function init() {
 
     // Canvas mouse events
     setupCanvasEvents();
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', handleKeyDown);
 
     // Start render loop
     requestAnimationFrame(render);
@@ -1228,6 +1255,40 @@ function pixelsToTime(px) {
 }
 
 // function timeToPixels removed (not needed)
+
+// ============================================================
+// KEYBOARD SHORTCUTS
+// ============================================================
+function handleKeyDown(e) {
+    // Ignorar si el foco esta en un input o select
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+
+    switch (e.key.toLowerCase()) {
+        case 'r':
+            e.preventDefault();
+            setMode('run');
+            flashKeyHint('run');
+            break;
+        case 's':
+            e.preventDefault();
+            setMode('stop');
+            flashKeyHint('stop');
+            break;
+        case 'n':
+            e.preventDefault();
+            setMode('single');
+            flashKeyHint('single');
+            break;
+    }
+}
+
+function flashKeyHint(cls) {
+    const btn = document.querySelector(`#toolbar button.${cls} kbd`);
+    if (btn) {
+        btn.classList.add('key-hint-active');
+        setTimeout(() => btn.classList.remove('key-hint-active'), 200);
+    }
+}
 
 // ============================================================
 // RENDER — Main Draw Loop
