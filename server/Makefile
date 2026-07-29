@@ -3,7 +3,7 @@
 # Licencia: MIT
 
 CXX      := g++
-CXXFLAGS := -std=c++17 -O3 -Wall -Wextra -pthread -I.
+CXXFLAGS := -std=c++17 -O3 -Wall -Wextra -pthread -I. -Wno-deprecated-declarations
 LDFLAGS  := -lpthread -lcrypto
 
 # Source files by layer
