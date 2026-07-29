@@ -458,9 +458,9 @@ html, body {
      TOOLBAR
      ============================================================ -->
 <div id="toolbar">
-    <button class="run active"    onclick="setMode('run')">▶ RUN<kbd>R</kbd></button>
-    <button class="stop"          onclick="setMode('stop')">■ STOP<kbd>S</kbd></button>
-    <button class="single"        onclick="setMode('single')">⚡ SINGLE<kbd>N</kbd></button>
+    <button class="run active"    onclick="setMode('run')" title="Run (R)">▶ RUN<kbd>R</kbd></button>
+    <button class="stop"          onclick="setMode('stop')" title="Stop (S)">■ STOP<kbd>S</kbd></button>
+    <button class="single"        onclick="setMode('single')" title="Single-shot (N)">⚡ SINGLE<kbd>N</kbd></button>
     <span id="pause-badge"><span id="pause-icon">⏸</span> PAUSED · <span id="pause-samples">0</span> samples</span>
 
     <div class="toolbar-sep"></div>
@@ -483,7 +483,7 @@ html, body {
 
     <div class="toolbar-sep"></div>
 
-    <label>Trigger<kbd>T</kbd></label>
+    <label title="Focus trigger pin (T)">Trigger<kbd>T</kbd></label>
     <select id="trigger-pin" onchange="updateTrigger()">
         <option value="-1">None</option>
     </select>
@@ -507,9 +507,9 @@ html, body {
 
     <div class="toolbar-sep"></div>
 
-    <button class="cursors" onclick="toggleCursors()">☰ Cursors<kbd>C</kbd></button>
-    <button class="csv"     onclick="exportCSV()">📥 CSV<kbd>E</kbd></button>
-    <button class="fit"     onclick="resetZoom()">⟲ Fit<kbd>F</kbd></button>
+    <button class="cursors" onclick="toggleCursors()" title="Toggle cursors (C)">☰ Cursors<kbd>C</kbd></button>
+    <button class="csv"     onclick="exportCSV()" title="Export CSV (E)">📥 CSV<kbd>E</kbd></button>
+    <button class="fit"     onclick="resetZoom()" title="Fit to screen (F)">⟲ Fit<kbd>F</kbd></button>
 </div>
 
 <!-- ============================================================
