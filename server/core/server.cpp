@@ -162,7 +162,7 @@ void LogicServer::broadcast_loop() {
             std::chrono::milliseconds(SEND_INTERVAL_MS));
 
         // Si hay solicitud de single-shot, la procesamos
-        bool single_mode = single_request_.exchange(false, std::memory_order_relaxed);
+        bool single_mode = single_request_.exchange(false, std::memory_order_acquire);
 
         auto samples = buffer_.drain();
         if (samples.empty()) {
@@ -170,7 +170,8 @@ void LogicServer::broadcast_loop() {
         }
 
         // Si estamos pausados (y no es single-shot), descartamos sin enviar
-        if (paused_.load(std::memory_order_relaxed) && !single_mode) {
+        // Usamos memory_order_acquire para visibilidad en ARM (RPi)
+        if (paused_.load(std::memory_order_acquire) && !single_mode) {
             continue;
         }
 
@@ -201,7 +202,7 @@ void LogicServer::broadcast_loop() {
 
         // Si era un single-shot, pausamos despues de enviar
         if (single_mode) {
-            paused_.store(true, std::memory_order_relaxed);
+            paused_.store(true, std::memory_order_release);
             LOG_INFO("Server", "Single-shot complete, paused");
         }
     }
@@ -404,14 +405,19 @@ void LogicServer::handle_ws_frame(int fd, const WS_Frame& frame) {
             LOG_INFO("Trigger", "GPIO%d %s", pin, type.c_str());
         } else if (cmd.find("\"run\"") != std::string::npos) {
             LOG_INFO("Server", "Cmd: run — resuming");
-            paused_.store(false, std::memory_order_relaxed);
+            paused_.store(false, std::memory_order_release);
         } else if (cmd.find("\"stop\"") != std::string::npos) {
             LOG_INFO("Server", "Cmd: stop — pausing");
-            paused_.store(true, std::memory_order_relaxed);
+            paused_.store(true, std::memory_order_release);
+            // Limpiar buffers de salida para pausa instantanea
+            std::lock_guard<std::mutex> lk(clients_mutex_);
+            for (auto& [fd, st] : clients_) {
+                st.write_buf.clear();
+            }
         } else if (cmd.find("\"single\"") != std::string::npos) {
             LOG_INFO("Server", "Cmd: single — one-shot");
-            paused_.store(false, std::memory_order_relaxed);
-            single_request_.store(true, std::memory_order_relaxed);
+            paused_.store(false, std::memory_order_release);
+            single_request_.store(true, std::memory_order_release);
         }
     }
 }
