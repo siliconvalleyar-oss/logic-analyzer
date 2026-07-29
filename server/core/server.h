@@ -76,6 +76,9 @@ public:
      */
     void stop();
 
+    /** Habilitar simulacion realista (jitter + glitches). */
+    void enable_realistic_sim() { gpio_.set_realistic(true); }
+
 private:
     // Estado por cliente
     struct ClientState {

@@ -158,7 +158,10 @@ void LogicServer::polling_loop() {
             continue;
         }
 
-        next += std::chrono::nanoseconds(period_ns);
+        // Timing: next = now + period_ns en vez de next += period_ns para
+        // evitar error acumulativo: si una iteracion se atrasa, la siguiente
+        // mantiene la frecuencia correcta en vez de atrasarse mas.
+        next = std::chrono::steady_clock::now() + std::chrono::nanoseconds(period_ns);
 
         uint32_t states = gpio_.read_all();
         uint64_t ts = std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -183,15 +186,15 @@ void LogicServer::polling_loop() {
                 if (!trigger_last_init) {
                     trigger_last_state = cur;
                     trigger_last_init  = true;
-                    // Primer sample pre-trigger: guardarlo
-                    {
-                        const size_t pt_max = pre_trig_max_.load(std::memory_order_acquire);
-                        if (pt_max > 0 && pre_trig_buffer_.size() >= pt_max) {
+                    // Primer sample pre-trigger: guardarlo (solo si pt_max > 0)
+                    const size_t pt_max = pre_trig_max_.load(std::memory_order_acquire);
+                    if (pt_max > 0) {
+                        if (pre_trig_buffer_.size() >= pt_max) {
                             pre_trig_buffer_.erase(pre_trig_buffer_.begin());
                         }
+                        pre_trig_buffer_.push_back({ts, states});
+                        in_pre_trig = true;
                     }
-                    pre_trig_buffer_.push_back({ts, states});
-                    in_pre_trig = true;
                 } else {
                     switch (trigger_type) {
                         case TriggerType::RISING:
@@ -391,8 +394,11 @@ void LogicServer::broadcast_loop() {
             }
         }
 
+        // sample_rate_hz solo se lee del main thread, nunca se modifica
+        // despues del constructor. Copia local para evitar data race.
+        const int sample_rate_hz = config_.sample_rate_hz;
         std::string json = proto_build_waveform(
-            samples, pj, config_.sample_rate_hz, trig_idx, need_reset);
+            samples, pj, sample_rate_hz, trig_idx, need_reset);
         std::string frame = ws_encode_text(json);
 
         // Per-client write buffer cap: si supera 1MB, descartar datos viejos

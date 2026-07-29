@@ -29,6 +29,9 @@ ServerConfig config_parse_args(int argc, char* argv[]) {
             }
         } else if (arg == "--simulate") {
             cfg.simulate = true;
+        } else if (arg == "--realistic") {
+            cfg.simulate = true;
+            cfg.realistic_sim = true;
         } else if (arg == "-v" || arg == "--verbose") {
             cfg.log_level = "DEBUG";
         } else if (arg == "-q" || arg == "--quiet") {
@@ -283,6 +286,7 @@ void config_print_help(const char* name) {
               << "  -c, --config <file>   Config file (default: config.json)\n"
               << "  -r, --rate <hz>       Sample rate (default: 500000)\n"
               << "  --simulate            Simulation mode (no GPIO)\n"
+              << "  --realistic           Realistic simulation (jitter + glitches, implies --simulate)\n"
               << "  -v, --verbose         Verbose logging (DEBUG level)\n"
               << "  -q, --quiet           Quiet mode (only ERROR/FATAL)\n"
               << "  -l, --log <file>      Log file path\n"

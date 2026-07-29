@@ -100,7 +100,19 @@ private:
     int                fd_             = -1;
     volatile uint32_t* gpio_map_       = nullptr;
     bool               simulation_mode_ = false;
+    bool               sim_realistic_  = false;
     uint64_t           sim_counter_    = 0;
+
+public:
+    /**
+     * Activa modo simulación realista con jitter y glitches.
+     * Por defecto las señales de simulación son perfectamente periódicas.
+     * Con este flag se agrega:
+     * - Jitter gaussiano (±1-2 ticks) en los bordes
+     * - Glitches ocasionales (transiciones de 1 muestra)
+     * - Ruido de bit (0.01% de probabilidad)
+     */
+    void set_realistic(bool v) { sim_realistic_ = v; }
 };
 
 #endif // LOGIC_GPIO_H

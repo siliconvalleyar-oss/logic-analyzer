@@ -36,6 +36,7 @@ struct ServerConfig {
     int     sample_rate_hz = 500000; ///< Frecuencia de muestreo en Hz
     int     buffer_size    = 65536;  ///< Tamano del ring buffer interno (antes 4096)
     bool    simulate       = false;  ///< true = modo simulacion (sin GPIO)
+    bool    realistic_sim  = false;  ///< true = simulacion con jitter/glitches
 
     // Logging
     std::string log_file   = "";    ///< Ruta al archivo de log (vacio = solo stderr)

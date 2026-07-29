@@ -75,6 +75,10 @@ bool ws_decode(const uint8_t* data, size_t len, WS_Frame& f) {
         off += 4;
     }
 
+    // Limitar payload a 1MB para evitar OOM en frames maliciosos o corruptos
+    static constexpr size_t MAX_WS_PAYLOAD = 1048576;
+    if (f.payload_len > MAX_WS_PAYLOAD) return false;
+
     if (len < off + f.payload_len) return false;
     f.payload.assign((const char*)(data + off), f.payload_len);
 

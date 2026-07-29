@@ -67,23 +67,46 @@ bool GPIOReader::init_simulation() {
 
 uint32_t GPIOReader::simulate_read() {
     sim_counter_++;
+    uint64_t c = sim_counter_;
+
+    // Jitter: desplazar el contador ±1-2 ticks para bordes no perfectos
+    // Usar el propio contador como pseudo-semilla para determinismo
+    if (sim_realistic_) {
+        uint64_t jitter_seed = (c * 6364136223846793005ULL + 1442695040888963407ULL);
+        int jitter = (int)(jitter_seed % 5) - 2;  // -2 a +2
+        c = (c > 2) ? c + jitter : c;  // no dejar que baje de 0
+    }
+
     uint32_t v = 0;
-    if ((sim_counter_ / 250) % 2 == 0)   v |= (1 << 2);   // 1 MHz
-    if ((sim_counter_ / 500) % 2 == 0)   v |= (1 << 3);   // 500 kHz
-    if ((sim_counter_ % 7) < 4)          v |= (1 << 4);   // random
-    if ((sim_counter_ % 2000) < 1500)    v |= (1 << 5);   // 75% duty
-    if ((sim_counter_ / 1000) % 2 == 0)  v |= (1 << 6);   // 250 kHz
-    if ((sim_counter_ / 2500) % 2 == 0)  v |= (1 << 7);   // 100 kHz
+    if ((c / 250) % 2 == 0)            v |= (1 << 2);   // 1 MHz
+    if ((c / 500) % 2 == 0)            v |= (1 << 3);   // 500 kHz
+    if ((c % 7) < 4)                   v |= (1 << 4);   // random
+    if ((c % 2000) < 1500)             v |= (1 << 5);   // 75% duty
+    if ((c / 1000) % 2 == 0)           v |= (1 << 6);   // 250 kHz
+    if ((c / 2500) % 2 == 0)           v |= (1 << 7);   // 100 kHz
     v |= (1 << 8);                                         // always high
-    if ((sim_counter_ % 10) < 5)         v |= (1 << 10);  // UART-like
-    if ((sim_counter_ % 1000) < 500)     v |= (1 << 11);  // 50% duty
-    if ((sim_counter_ / 100) % 2 == 0)   v |= (1 << 17);  // SPI CLK
-    if (((sim_counter_ / 200) % 8) & 1)  v |= (1 << 22);  // SPI MOSI
-    if ((sim_counter_ / 5000) % 5000 < 4900) v |= (1 << 23); // SPI CS
-    if ((sim_counter_ / 600) % 2 == 0)   v |= (1 << 24);  // I2C SDA
-    if ((sim_counter_ % 600) < 300)      v |= (1 << 27);  // I2C SCL
-    if ((sim_counter_ % 4340) < 2170)    v |= (1 << 14);  // UART TX
-    if ((sim_counter_ % 4340) < 2170)    v |= (1 << 15);  // UART RX
+    if ((c % 10) < 5)                  v |= (1 << 10);  // UART-like
+    if ((c % 1000) < 500)              v |= (1 << 11);  // 50% duty
+    if ((c / 100) % 2 == 0)            v |= (1 << 17);  // SPI CLK
+    if (((c / 200) % 8) & 1)           v |= (1 << 22);  // SPI MOSI
+    if ((c / 5000) % 5000 < 4900)      v |= (1 << 23);  // SPI CS
+    if ((c / 600) % 2 == 0)            v |= (1 << 24);  // I2C SDA
+    if ((c % 600) < 300)               v |= (1 << 27);  // I2C SCL
+    if ((c % 4340) < 2170)             v |= (1 << 14);  // UART TX
+    if ((c % 4340) < 2170)             v |= (1 << 15);  // UART RX
+
+    // Glitches: ~0.01% de muestras tienen un bit aleatorio invertido
+    if (sim_realistic_ && (sim_counter_ % 10000) == 0) {
+        int glitch_pin = (sim_counter_ / 10000) % 27;
+        v ^= (1 << glitch_pin);
+    }
+
+    // Ruido de bit: ~0.005% de probabilidad de toggle en cualquier pin
+    if (sim_realistic_ && (sim_counter_ % 20000) == 0) {
+        int noise_pin = ((sim_counter_ / 20000) * 7) % 27;
+        v ^= (1 << noise_pin);
+    }
+
     return v;
 }
 

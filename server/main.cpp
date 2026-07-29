@@ -46,8 +46,12 @@ int main(int argc, char* argv[]) {
     signal(SIGTERM, signal_handler);
     signal(SIGPIPE, SIG_IGN);
 
-    // Iniciar servidor
+    // Activar simulacion realista si se solicito
     LogicServer server(config);
+    if (config.realistic_sim) {
+        server.enable_realistic_sim();
+        LOG_INFO("Main", "Realistic simulation enabled (jitter + glitches)");
+    }
     if (!server.start()) {
         LOG_ERROR("Main", "Failed to start server on port %d",
                   config.http_port);
