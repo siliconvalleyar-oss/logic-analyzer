@@ -1,0 +1,21 @@
+# Compiled binaries
+server/logic_server
+*.o
+*.obj
+*.exe
+
+# WaveForms Live reference (third-party, not part of this project)
+reference_www/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+build/
+dist/
