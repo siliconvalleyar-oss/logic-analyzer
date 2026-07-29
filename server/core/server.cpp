@@ -165,15 +165,16 @@ void LogicServer::broadcast_loop() {
         // Si hay solicitud de single-shot, la procesamos
         bool single_mode = single_request_.exchange(false, std::memory_order_acquire);
 
-        auto samples = buffer_.drain();
-        if (samples.empty()) {
-            if (single_mode) continue;  // esperar a que haya datos
-        }
-
-        // Si estamos pausados (y no es single-shot), descartamos sin enviar
-        // Usamos memory_order_acquire para visibilidad en ARM (RPi)
+        // PRIMERO verificar si estamos pausados (antes de drain())
+        // Asi los datos se acumulan en el buffer mientras estamos en STOP
+        // y cuando se reanuda (RUN) estan disponibles inmediatamente
         if (paused_.load(std::memory_order_acquire) && !single_mode) {
             continue;
+        }
+
+        auto samples = buffer_.drain();
+        if (samples.empty()) {
+            continue;  // esperar datos, preservar pending_reset_
         }
 
         // Limit samples per WebSocket message to prevent browser issues
