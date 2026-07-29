@@ -1317,8 +1317,12 @@ function render(timestamp) {
             continue;
         }
 
-        // Dibujar todos los samples visibles
+        // Dibujar todos los samples visibles con optimizacion stair-step
+        // Para señales lentas: si varios samples caen en el mismo pixel,
+        // solo dibujamos el ultimo estado de ese pixel para evitar
+        // sobrecarga de lineTo() y obtener escalones perfectos.
         let prevBit = s0;
+        let lastPxX = -1;
 
         for (let i = drawStart; i < drawEnd; i++) {
             const t = timeUs[i];
@@ -1328,15 +1332,24 @@ function render(timestamp) {
 
             const bit = (state.states[i] >> pin) & 1;
             const y = bit ? yHigh : yLow;
+            const pxX = Math.round(x);
 
-            if (bit !== prevBit) {
-                // Transición vertical: línea horizontal hasta el punto de cambio, luego vertical
+            if (pxX !== lastPxX) {
+                // Cambio de columna de pixel: dibujar la transicion
+                if (bit !== prevBit) {
+                    ctx.lineTo(x, prevBit ? yHigh : yLow);
+                    ctx.lineTo(x, y);
+                    prevBit = bit;
+                } else {
+                    ctx.lineTo(x, y);
+                }
+                lastPxX = pxX;
+            } else if (bit !== prevBit) {
+                // Cambio de estado dentro del mismo pixel:
+                // dibujar la transicion igual (transicion sub-pixel)
                 ctx.lineTo(x, prevBit ? yHigh : yLow);
                 ctx.lineTo(x, y);
                 prevBit = bit;
-            } else {
-                // Mismo estado: extender línea horizontal
-                ctx.lineTo(x, y);
             }
         }
 
