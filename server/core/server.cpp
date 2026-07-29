@@ -214,6 +214,11 @@ void LogicServer::polling_loop() {
                         // === TRIGGER DISPARADO ===
                         trigger_triggered_.store(true, std::memory_order_release);
                         trigger_timestamp_ns_.store(ts, std::memory_order_release);
+                        // En SINGLE mode: limpiar flag para que broadcast loop
+                        // no espere mas (y para que polling loop no siga bloqueando)
+                        if (single_request_.load(std::memory_order_acquire)) {
+                            single_request_.store(false, std::memory_order_release);
+                        }
                         LOG_INFO("Trigger", "Fired! GPIO%d state=%d  pre=%zu samples",
                                  trigger_pin, cur, pre_trig_buffer_.size());
 
@@ -286,7 +291,7 @@ void LogicServer::broadcast_loop() {
         std::this_thread::sleep_for(
             std::chrono::milliseconds(SEND_INTERVAL_MS));
 
-        bool single_mode = single_request_.exchange(false, std::memory_order_acquire);
+        bool single_mode = single_request_.load(std::memory_order_acquire);
         bool is_paused   = paused_.load(std::memory_order_acquire);
 
         // (El armado/desarmado de trigger se maneja ahora en los handlers
@@ -306,13 +311,10 @@ void LogicServer::broadcast_loop() {
 
         // Limitar tamano del mensaje WebSocket. En reset (RUN o reconexion)
         // enviamos mas muestras para que el cliente tenga una vision completa;
-        // en modo continuo solo enviamos las ultimas MAX_BURST.
-        constexpr size_t MAX_BURST_RESET = 16384;  // ~32ms a 500kHz
-        constexpr size_t MAX_BURST_NORMAL = 4096;
-        if (need_reset && samples.size() > MAX_BURST_RESET) {
-            samples.erase(samples.begin(),
-                          samples.begin() + (samples.size() - MAX_BURST_RESET));
-        } else if (!need_reset && samples.size() > MAX_BURST_NORMAL) {
+        // en modo continuo enviamos todo lo disponible (hasta buffer completo).
+        constexpr size_t MAX_BURST_RESET = 65536;  // buffer completo
+        constexpr size_t MAX_BURST_NORMAL = 65536;  // buffer completo
+        if (samples.size() > MAX_BURST_NORMAL) {
             samples.erase(samples.begin(),
                           samples.begin() + (samples.size() - MAX_BURST_NORMAL));
         }
@@ -371,10 +373,17 @@ void LogicServer::broadcast_loop() {
             }
         }
 
-        // Si era un single-shot, pausamos despues de enviar
+        // Si era un single-shot: pausar despues de enviar.
+        // Limpiamos el flag solo si el trigger ya disparo o no hay trigger.
+        // Esto evita que el flag quede atascado en true en SINGLE sin trigger.
         if (single_mode) {
-            paused_.store(true, std::memory_order_release);
-            LOG_INFO("Server", "Single-shot complete, paused");
+            bool trig_ok = !trigger_armed_.load(std::memory_order_acquire)
+                        || trigger_triggered_.load(std::memory_order_acquire);
+            if (trig_ok) {
+                single_request_.store(false, std::memory_order_release);
+                paused_.store(true, std::memory_order_release);
+                LOG_INFO("Server", "Single-shot complete, paused");
+            }
         }
     }
 }
@@ -725,8 +734,10 @@ void LogicServer::handle_ws_frame(int fd, const WS_Frame& frame) {
         } else if (cmd.find("\"stop\"") != std::string::npos) {
             LOG_INFO("Server", "Cmd: stop — pausing");
             paused_.store(true, std::memory_order_release);
-            // Desarmar trigger al pausar
+            // Desarmar trigger y resetear estado para poder re-armar en RUN
             trigger_armed_.store(false, std::memory_order_release);
+            trigger_triggered_.store(true, std::memory_order_release);
+            single_request_.store(false, std::memory_order_release);
             // Limpiar buffers de salida — ya estamos bajo clients_mutex_
             // (handle_client_read lockea clients_mutex_ antes de llamarnos).
             for (auto& [fd, st] : clients_) {
