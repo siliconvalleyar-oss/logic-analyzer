@@ -7,10 +7,12 @@ fi
 echo "Procesos encontrados:"
 ps -p $pids -o pid,cmd --no-headers
 echo
-kill -9 $pids
+sudo kill -9 $pids
 sleep 1
-if pgrep logic_server > /dev/null; then
-    echo "No se pudieron cerrar todos"
+pids=$(pgrep logic_server)
+if [ -n "$pids" ]; then
+    echo "No se pudieron cerrar:"
+    ps -p $pids -o pid,cmd --no-headers
     exit 1
 fi
 echo "Todos cerrados"
