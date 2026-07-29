@@ -25,6 +25,7 @@ ifneq (,$(findstring arm,$(UNAME_M)))
 endif
 ifneq (,$(findstring aarch64,$(UNAME_M)))
     CXXFLAGS += -DGPIO_MMAP=1
+    LDFLAGS  += -latomic
 endif
 
 TARGET := logic_server
