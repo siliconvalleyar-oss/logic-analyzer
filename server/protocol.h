@@ -1,0 +1,61 @@
+//==============================================================================
+// protocol.h
+// Mensajes JSON del protocolo WebSocket del analizador logico
+// Licencia: MIT
+//==============================================================================
+
+#ifndef LOGIC_PROTOCOL_H
+#define LOGIC_PROTOCOL_H
+
+#include <string>
+#include <vector>
+#include <cstdint>
+#include "ring_buffer.h"
+#include "trigger.h"
+
+/**
+ * Construye un mensaje JSON de tipo "waveform" para enviar por WebSocket.
+ *
+ * @param samples      Muestras a incluir
+ * @param pins_json    String JSON con la lista de pines, ej: "[2,3,4,5]"
+ * @param rate_hz      Frecuencia de muestreo
+ * @param trigger_idx  Indice del trigger (-1 si no hubo)
+ * @return             String JSON listo para enviar
+ */
+std::string proto_build_waveform(const std::vector<Sample>& samples,
+                                 const std::string& pins_json,
+                                 int rate_hz, int trigger_idx);
+
+/**
+ * Construye un mensaje JSON de tipo "state".
+ *
+ * @param rate       Frecuencia de muestreo
+ * @param pins_json  String JSON con lista de pines
+ * @param buf_size   Tamano del buffer
+ * @return           String JSON
+ */
+std::string proto_build_state(int rate, const std::string& pins_json,
+                              int buf_size);
+
+/**
+ * Extrae el valor de un campo string de un JSON.
+ *
+ * @param json   String JSON completo
+ * @param key    Nombre del campo (ej: "cmd")
+ * @return       Valor del campo, o string vacio si no se encuentra
+ */
+std::string proto_extract_string(const std::string& json,
+                                 const std::string& key);
+
+/**
+ * Extrae el valor de un campo entero de un JSON.
+ *
+ * @param json       String JSON completo
+ * @param key        Nombre del campo (ej: "pin")
+ * @param default_val Valor por defecto si no se encuentra
+ * @return           Valor del campo
+ */
+int proto_extract_int(const std::string& json, const std::string& key,
+                      int default_val = 0);
+
+#endif // LOGIC_PROTOCOL_H
