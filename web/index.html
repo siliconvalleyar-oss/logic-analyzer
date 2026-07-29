@@ -583,7 +583,7 @@ const state = {
     // Data
     timestamps:     [],
     states:         [],
-    maxSamples:     4096,
+    maxSamples:     65536,
 
     // Cached time in microseconds (pre-computed, updated on new data)
     timeUsCache:    [],
@@ -871,8 +871,7 @@ function handleMessage(msg) {
             // Update rate if provided
             if (msg.rate) state.sampleRate = msg.rate;
 
-            // Auto-fit timebase la primera vez que llegan datos
-            // (solo si el usuario no ha elegido explicitamente un timebase)
+            // Auto-fit la primera vez que llegan datos (o tras cambio manual de timebase)
             if (!state._autoFitDone && state.timestamps.length >= 2) {
                 const dataDur = (state.timestamps[state.timestamps.length-1] - state.timestamps[0]) / 1000;
                 const visibleTime = state.timebaseUs * 10 / state.zoomLevel;
@@ -1006,6 +1005,8 @@ function setMode(mode) {
 function setTimebase(val) {
     state.timebaseUs = parseInt(val);
     updatePixelsPerUs();
+    // Permitir que auto-fit se re-evalue con datos nuevos
+    state._autoFitDone = false;
     // Enviar timebase al servidor remoto (auto-guarda en config.json)
     if (state.connected) {
         sendCommand({ cmd: 'set_timebase', value_us: state.timebaseUs });

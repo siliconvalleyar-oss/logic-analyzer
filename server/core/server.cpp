@@ -185,12 +185,9 @@ void LogicServer::broadcast_loop() {
             continue;  // esperar datos, preservar pending_reset_
         }
 
-        // Limit samples per WebSocket message to prevent browser issues
-        // with very large JSON payloads (~100KB for 3000+ samples).
-        // Browser crashes/WebSocket disconnects when receiving too many
-        // samples in a single frame. Limiting to 1024 keeps each frame
-        // under ~35KB which is safe for all browsers.
-        constexpr size_t MAX_SAMPLES_PER_BURST = 1024;
+        // Limit samples per WebSocket message. With larger buffer we can
+        // send more per burst. ~4096 samples is ~80KB JSON, safe for modern browsers.
+        constexpr size_t MAX_SAMPLES_PER_BURST = 4096;
         if (samples.size() > MAX_SAMPLES_PER_BURST) {
             samples.erase(samples.begin(),
                           samples.begin() + (samples.size() - MAX_SAMPLES_PER_BURST));
