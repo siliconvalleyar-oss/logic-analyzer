@@ -81,6 +81,9 @@ public:
 
 private:
     // Estado por cliente
+    // Límite de buffer HTTP (previene slow loris / OOM en read_buf)
+    static constexpr size_t MAX_HTTP_BUF = 16384;  // 16KB
+
     struct ClientState {
         enum State { HTTP_EXPECT, WS_CONNECTED, HTTP_DONE, CLOSED };
         State       state = HTTP_EXPECT;
@@ -88,6 +91,7 @@ private:
         std::string write_buf;
         std::string ws_key;
         std::vector<uint8_t> frame_buf;
+        std::chrono::steady_clock::time_point connect_time; ///< Timestamp de conexion
     };
 
     // Threads

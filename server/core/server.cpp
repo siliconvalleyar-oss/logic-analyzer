@@ -486,6 +486,7 @@ void LogicServer::accept_new_client() {
 
     std::lock_guard<std::mutex> lk(clients_mutex_);
     clients_[fd] = ClientState{};
+    clients_[fd].connect_time = std::chrono::steady_clock::now();
 }
 
 //------------------------------------------------------------------------------
@@ -514,6 +515,23 @@ void LogicServer::handle_client_read(int fd) {
 
     if (c.state == ClientState::HTTP_EXPECT) {
         c.read_buf.append(buf, n);
+
+        // Slow loris / OOM protection: limitar buffer HTTP a 16KB
+        if (c.read_buf.size() > MAX_HTTP_BUF) {
+            LOG_WARN("Server", "Client %d HTTP buf too large (%zu bytes), closing",
+                     fd, c.read_buf.size());
+            close_client_locked(fd, it);
+            return;
+        }
+
+        // Timeout de 10s para conexiones HTTP lentas
+        auto elapsed = std::chrono::steady_clock::now() - c.connect_time;
+        if (elapsed > std::chrono::seconds(10)) {
+            LOG_WARN("Server", "Client %d HTTP timeout (10s), closing", fd);
+            close_client_locked(fd, it);
+            return;
+        }
+
         LOG_INFO("Server", "HTTP_EXPECT buf size=%zu, searching CRLFCRLF", c.read_buf.size());
         size_t he = c.read_buf.find("\r\n\r\n");
         if (he != std::string::npos) {
