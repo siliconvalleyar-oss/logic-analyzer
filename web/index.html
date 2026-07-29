@@ -1005,8 +1005,6 @@ function setMode(mode) {
 function setTimebase(val) {
     state.timebaseUs = parseInt(val);
     updatePixelsPerUs();
-    // Permitir que auto-fit se re-evalue con datos nuevos
-    state._autoFitDone = false;
     // Enviar timebase al servidor remoto (auto-guarda en config.json)
     if (state.connected) {
         sendCommand({ cmd: 'set_timebase', value_us: state.timebaseUs });
