@@ -961,6 +961,14 @@ function handleMessage(msg) {
                 }
             }
         }
+        if (msg.zoom_level !== undefined) {
+            state.zoomLevel = msg.zoom_level;
+            updatePixelsPerUs();
+            document.getElementById('ib-zoom').textContent = state.zoomLevel.toFixed(1) + 'x';
+        }
+        if (msg.pan_x !== undefined) {
+            state.currentPanX = msg.pan_x;
+        }
         if (msg.pins) {
             document.getElementById('info-pins').textContent = msg.pins.length;
         }
@@ -1002,6 +1010,23 @@ function setTimebase(val) {
     if (state.connected) {
         sendCommand({ cmd: 'set_timebase', value_us: state.timebaseUs });
     }
+}
+
+// ============================================================
+// VIEWPORT DEBOUNCE (zoom/pan persistence)
+// ============================================================
+let viewportTimer = null;
+function debounceSendViewport() {
+    if (viewportTimer) clearTimeout(viewportTimer);
+    viewportTimer = setTimeout(() => {
+        if (state.connected) {
+            sendCommand({
+                cmd: 'set_viewport',
+                zoom: Math.round(state.zoomLevel * 100),
+                pan: Math.round(state.currentPanX)
+            });
+        }
+    }, 500);
 }
 
 function autoFitTimebase() {
@@ -1101,6 +1126,8 @@ function exportCSV() {
 function resetZoom() {
     state.zoomLevel = 1;
     state.currentPanX = 0;
+    document.getElementById('ib-zoom').textContent = '1.0x';
+    debounceSendViewport();
     // Auto-fit timebase a los datos disponibles
     const len = state.timestamps.length;
     if (len >= 2) {
@@ -1188,6 +1215,7 @@ function onMouseMove(e) {
         const dx = pos.x - state.panStartX;
         state.currentPanX += dx / state.zoomLevel;
         state.panStartX = pos.x;
+        debounceSendViewport();
     }
 
     // Update cursor style
@@ -1228,6 +1256,7 @@ function onWheel(e) {
     }
 
     document.getElementById('ib-zoom').textContent = state.zoomLevel.toFixed(1) + 'x';
+    debounceSendViewport();
 }
 
 function updateCursorInfo() {

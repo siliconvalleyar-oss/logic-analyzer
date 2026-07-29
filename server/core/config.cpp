@@ -80,6 +80,35 @@ ServerConfig config_load_file(const std::string& filepath) {
     cfg.buffer_size = extract("buffer_size", 4096);
     cfg.trigger_pin = extract("pin", -1);
     cfg.timebase_us = extract("timebase_us", 500000);
+    // zoom_level as float from key value (ej: "1.5")
+    {
+        size_t p = json.find("\"zoom_level\"");
+        if (p != std::string::npos) {
+            p = json.find(':', p) + 1;
+            while (p < json.size() && (json[p]==' '||json[p]=='\t')) p++;
+            std::string val;
+            while (p < json.size() && (json[p]>='0'&&json[p]<='9'||json[p]=='.'))
+                { val += json[p]; p++; }
+            if (!val.empty()) cfg.zoom_level = std::stof(val);
+        }
+    }
+    // pan_x as float
+    {
+        size_t p = json.find("\"pan_x\"");
+        if (p != std::string::npos) {
+            p = json.find(':', p) + 1;
+            while (p < json.size() && (json[p]==' '||json[p]=='\t')) p++;
+            bool neg = false;
+            if (p < json.size() && json[p]=='-') { neg=true; p++; }
+            std::string val;
+            while (p < json.size() && (json[p]>='0'&&json[p]<='9'||json[p]=='.'))
+                { val += json[p]; p++; }
+            if (!val.empty()) {
+                float v = std::stof(val);
+                cfg.pan_x = neg ? -v : v;
+            }
+        }
+    }
 
     // enabled_pins from JSON array
     {
@@ -208,6 +237,9 @@ bool config_save_file(const ServerConfig& cfg, const std::string& filepath) {
         json += std::to_string(cfg.enabled_pins[i]);
     }
     json += "],\n";
+    // Zoom / Pan
+    json += "  \"zoom_level\": " + std::to_string(cfg.zoom_level) + ",\n";
+    json += "  \"pan_x\": " + std::to_string(cfg.pan_x) + ",\n";
     // Decoder config (si no esta vacio)
     if (!cfg.decoder_config_json.empty()) {
         json += "  \"decoder\": " + cfg.decoder_config_json + ",\n";

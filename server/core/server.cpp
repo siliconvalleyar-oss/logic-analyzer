@@ -390,6 +390,9 @@ void LogicServer::handle_http(int fd, ClientState& c,
                 ep_json += std::to_string(config_.enabled_pins[i]);
             }
             ep_json += "]";
+            // Zoom/Pan
+            float zl = config_.zoom_level;
+            float px = config_.pan_x;
             // Decoder config: usar string guardado o "null"
             std::string dec_json = config_.decoder_config_json.empty() ? "null" : config_.decoder_config_json;
             c.write_buf += ws_encode_text(proto_build_config(
@@ -398,7 +401,8 @@ void LogicServer::handle_http(int fd, ClientState& c,
                 proto_build_labels_json(config_.channel_labels),
                 ep_json,
                 dec_json,
-                pins_json()));
+                pins_json(),
+                zl, px));
         }
         c.state = ClientState::WS_CONNECTED;
         c.read_buf.clear();
@@ -542,6 +546,14 @@ void LogicServer::handle_ws_frame(int fd, const WS_Frame& frame) {
             LOG_INFO("Server", "Cmd: single — one-shot");
             paused_.store(false, std::memory_order_release);
             single_request_.store(true, std::memory_order_release);
+        } else if (cmd.find("\"set_viewport\"") != std::string::npos) {
+            // {"cmd":"set_viewport","zoom":1.5,"pan":123.0}
+            float zoom = (float)proto_extract_int(cmd, "zoom", 100) / 100.0f;
+            float pan  = (float)proto_extract_int(cmd, "pan", 0);
+            config_.zoom_level = zoom;
+            config_.pan_x = pan;
+            config_save_file(config_);
+            LOG_INFO("Server", "Viewport: zoom=%.2f pan=%.0f — config saved", zoom, pan);
         }
     }
 }

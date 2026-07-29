@@ -46,6 +46,8 @@ struct ServerConfig {
     std::map<int, std::string> channel_labels; ///< Labels por GPIO, ej: {2:"CLK", 3:"DATA"}
     std::vector<int> enabled_pins; ///< Pines habilitados (vacio = todos habilitados)
     std::string decoder_config_json; ///< Config del decodificador (JSON string)
+    float   zoom_level     = 1.0f;  ///< Nivel de zoom (1.0 = default)
+    float   pan_x          = 0.0f;  ///< Desplazamiento horizontal en microsegundos
 
     // Trigger
     int     trigger_pin    = -1;     ///< Pin GPIO para trigger (-1 = desactivado)
