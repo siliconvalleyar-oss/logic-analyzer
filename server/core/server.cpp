@@ -135,12 +135,21 @@ void LogicServer::polling_loop() {
     gpio_.read_all();
     auto next = std::chrono::steady_clock::now();
 
+    // Estado del trigger: recordar ultimo estado para deteccion de flanco
+    int  trigger_last_state = 0;
+    bool trigger_last_init  = false;
+
+    // Pre-trigger: inicializar buffer
+    pre_trig_buffer_.clear();
+    pre_trig_buffer_.reserve(pre_trig_max_.load(std::memory_order_acquire));
+    bool in_pre_trig = false;
+
     while (running_) {
         // Si estamos pausados (STOP), no leer GPIO ni llenar buffer
-        // para ahorrar CPU. Dormir 50ms y verificar de nuevo.
         if (paused_.load(std::memory_order_acquire)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             next = std::chrono::steady_clock::now();
+            trigger_last_init = false;
             continue;
         }
 
@@ -149,6 +158,105 @@ void LogicServer::polling_loop() {
         uint32_t states = gpio_.read_all();
         uint64_t ts = std::chrono::duration_cast<std::chrono::nanoseconds>(
             std::chrono::steady_clock::now().time_since_epoch()).count();
+
+        // === LOGICA DE TRIGGER ACTIVA con PRE-TRIGGER ===
+        if (trigger_armed_.load(std::memory_order_acquire) &&
+            !trigger_triggered_.load(std::memory_order_acquire)) {
+
+            int trigger_pin;
+            TriggerType trigger_type;
+            {
+                std::lock_guard<std::mutex> lk(trigger_mutex_);
+                trigger_pin  = trigger_.pin;
+                trigger_type = trigger_.type;
+            }
+
+            if (trigger_pin >= 0 && trigger_type != TriggerType::NONE) {
+                int cur = (states >> trigger_pin) & 1;
+                bool fire = false;
+
+                if (!trigger_last_init) {
+                    trigger_last_state = cur;
+                    trigger_last_init  = true;
+                    // Primer sample pre-trigger: guardarlo
+                    {
+                        const size_t pt_max = pre_trig_max_.load(std::memory_order_acquire);
+                        if (pt_max > 0 && pre_trig_buffer_.size() >= pt_max) {
+                            pre_trig_buffer_.erase(pre_trig_buffer_.begin());
+                        }
+                    }
+                    pre_trig_buffer_.push_back({ts, states});
+                    in_pre_trig = true;
+                } else {
+                    switch (trigger_type) {
+                        case TriggerType::RISING:
+                            fire = (trigger_last_state == 0 && cur == 1);
+                            break;
+                        case TriggerType::FALLING:
+                            fire = (trigger_last_state == 1 && cur == 0);
+                            break;
+                        case TriggerType::BOTH:
+                            fire = (trigger_last_state != cur);
+                            break;
+                        case TriggerType::HIGH:
+                            fire = (cur == 1);
+                            break;
+                        case TriggerType::LOW:
+                            fire = (cur == 0);
+                            break;
+                        default:
+                            break;
+                    }
+                    trigger_last_state = cur;
+
+                    if (fire) {
+                        // === TRIGGER DISPARADO ===
+                        trigger_triggered_.store(true, std::memory_order_release);
+                        trigger_timestamp_ns_.store(ts, std::memory_order_release);
+                        LOG_INFO("Trigger", "Fired! GPIO%d state=%d  pre=%zu samples",
+                                 trigger_pin, cur, pre_trig_buffer_.size());
+
+                        // 1) Volcar pre-trigger al buffer principal
+                        for (auto& s : pre_trig_buffer_) {
+                            buffer_.push(s.timestamp_ns, s.gpio_state);
+                        }
+                        pre_trig_buffer_.clear();
+                        in_pre_trig = false;
+
+                        // El push del sample de disparo lo hace el push general
+                        // de abajo, para evitar duplicar
+                    } else {
+                        // No ha disparado: acumular en pre-trigger buffer
+                        {
+                            const size_t pt_max = pre_trig_max_.load(std::memory_order_acquire);
+                            if (pt_max > 0 && pre_trig_buffer_.size() >= pt_max) {
+                                pre_trig_buffer_.erase(pre_trig_buffer_.begin());
+                            }
+                        }
+                        pre_trig_buffer_.push_back({ts, states});
+                        in_pre_trig = true;
+
+                        // Esperar y saltar push a buffer principal
+                        auto now = std::chrono::steady_clock::now();
+                        while (now < next) {
+                            std::this_thread::yield();
+                            now = std::chrono::steady_clock::now();
+                        }
+                        continue;
+                    }
+                }
+            } else {
+                trigger_armed_.store(false, std::memory_order_release);
+            }
+        } else if (!trigger_armed_.load(std::memory_order_acquire)) {
+            // Si no hay trigger, asegurar que pre-trigger buffer esta limpio
+            if (in_pre_trig) {
+                pre_trig_buffer_.clear();
+                in_pre_trig = false;
+            }
+        }
+
+        // Push al buffer principal (post-trigger o sin trigger)
         buffer_.push(ts, states);
 
         auto now = std::chrono::steady_clock::now();
@@ -170,32 +278,78 @@ void LogicServer::broadcast_loop() {
         std::this_thread::sleep_for(
             std::chrono::milliseconds(SEND_INTERVAL_MS));
 
-        // Si hay solicitud de single-shot, la procesamos
         bool single_mode = single_request_.exchange(false, std::memory_order_acquire);
+        bool is_paused   = paused_.load(std::memory_order_acquire);
 
-        // PRIMERO verificar si estamos pausados (antes de drain())
-        // Asi los datos se acumulan en el buffer mientras estamos en STOP
-        // y cuando se reanuda (RUN) estan disponibles inmediatamente
-        if (paused_.load(std::memory_order_acquire) && !single_mode) {
+        // (El armado/desarmado de trigger se maneja ahora en los handlers
+        //  de comandos run/stop/single y set_trigger)
+
+        if (is_paused && !single_mode) {
             continue;
         }
 
         auto samples = buffer_.drain();
         if (samples.empty()) {
-            continue;  // esperar datos, preservar pending_reset_
+            continue;  // preservar pending_reset_
         }
 
-        // Limit samples per WebSocket message. With larger buffer we can
-        // send more per burst. ~4096 samples is ~80KB JSON, safe for modern browsers.
-        constexpr size_t MAX_SAMPLES_PER_BURST = 4096;
-        if (samples.size() > MAX_SAMPLES_PER_BURST) {
-            samples.erase(samples.begin(),
-                          samples.begin() + (samples.size() - MAX_SAMPLES_PER_BURST));
-        }
-
+        // Leer need_reset ANTES de truncar, para no perder el flag
         bool need_reset = pending_reset_.exchange(false, std::memory_order_acq_rel);
 
-        int trig_idx = trigger_find_index(samples, trigger_);
+        // Limitar tamano del mensaje WebSocket. En reset (RUN o reconexion)
+        // enviamos mas muestras para que el cliente tenga una vision completa;
+        // en modo continuo solo enviamos las ultimas MAX_BURST.
+        constexpr size_t MAX_BURST_RESET = 16384;  // ~32ms a 500kHz
+        constexpr size_t MAX_BURST_NORMAL = 4096;
+        if (need_reset && samples.size() > MAX_BURST_RESET) {
+            samples.erase(samples.begin(),
+                          samples.begin() + (samples.size() - MAX_BURST_RESET));
+        } else if (!need_reset && samples.size() > MAX_BURST_NORMAL) {
+            samples.erase(samples.begin(),
+                          samples.begin() + (samples.size() - MAX_BURST_NORMAL));
+        }
+
+        // Buscar indice de trigger:
+        // 1) Si hay un timestamp de trigger guardado, buscar coincidencia exacta
+        //    (metodo mas preciso, usado cuando el pre-trigger esta activo)
+        // 2) Si no, usar trigger_find_index en el batch (modo clasico)
+        int trig_idx = -1;
+        uint64_t trig_ts = trigger_timestamp_ns_.exchange(0, std::memory_order_acq_rel);
+        if (trig_ts > 0) {
+            // Buscar el sample con timestamp exacto del trigger
+            for (size_t i = 0; i < samples.size(); i++) {
+                if (samples[i].timestamp_ns == trig_ts) {
+                    trig_idx = (int)i;
+                    break;
+                }
+            }
+            if (trig_idx < 0) {
+                // No encontrado exacto: buscar el mas cercano
+                uint64_t best_dist = UINT64_MAX;
+                for (size_t i = 0; i < samples.size(); i++) {
+                    uint64_t dist = (samples[i].timestamp_ns > trig_ts)
+                        ? (samples[i].timestamp_ns - trig_ts)
+                        : (trig_ts - samples[i].timestamp_ns);
+                    if (dist < best_dist) {
+                        best_dist = dist;
+                        trig_idx = (int)i;
+                    }
+                }
+            }
+            LOG_INFO("Trigger", "Found at batch index %d (ts=%lu)", trig_idx, trig_ts);
+        } else {
+            // Sin timestamp: usar deteccion clasica por flanco
+            TriggerConfig trig_copy;
+            {
+                std::lock_guard<std::mutex> lk(trigger_mutex_);
+                trig_copy = trigger_;
+            }
+            trig_idx = trigger_find_index(samples, trig_copy);
+            if (trig_idx < 0 && trigger_triggered_.load(std::memory_order_acquire)) {
+                trig_idx = 0;
+            }
+        }
+
         std::string json = proto_build_waveform(
             samples, pj, config_.sample_rate_hz, trig_idx, need_reset);
         std::string frame = ws_encode_text(json);
@@ -399,12 +553,16 @@ void LogicServer::handle_http(int fd, ClientState& c,
                 ep_json,
                 dec_json,
                 pins_json(),
-                zl, px));
+                zl, px,
+                (int)pre_trig_max_.load(std::memory_order_acquire)));
         }
         c.state = ClientState::WS_CONNECTED;
         c.read_buf.clear();
+        // Marcar reset pendiente para que el proximo batch de waveform
+        // incluya todas las muestras acumuladas (no solo 4096)
+        pending_reset_.store(true, std::memory_order_release);
         set_writable(fd);
-        LOG_INFO("Server", "101 queued, state+config queued, ws connected");
+        LOG_INFO("Server", "101 queued, state+config queued, ws connected (reset pending)");
 
         LOG_INFO("Server", "Client %d upgraded to WebSocket", fd);
     } else {
@@ -431,13 +589,26 @@ void LogicServer::handle_ws_frame(int fd, const WS_Frame& frame) {
         if (cmd.find("\"set_trigger\"") != std::string::npos) {
             int pin  = proto_extract_int(cmd, "pin", -1);
             std::string type = proto_extract_string(cmd, "type");
-            trigger_.pin  = pin;
-            trigger_.type = TriggerConfig::from_string(type);
+            {
+                std::lock_guard<std::mutex> lk(trigger_mutex_);
+                trigger_.pin  = pin;
+                trigger_.type = TriggerConfig::from_string(type);
+            }
             // Persistir en config y guardar
             config_.trigger_pin  = pin;
             config_.trigger_type = type;
             config_save_file(config_);
             LOG_INFO("Trigger", "GPIO%d %s — config saved", pin, type.c_str());
+            // Armar/desarmar trigger
+            if (pin >= 0 && type != "none") {
+                trigger_armed_.store(true, std::memory_order_release);
+                trigger_triggered_.store(false, std::memory_order_release);
+                LOG_INFO("Trigger", "Armed: GPIO%d %s", pin, type.c_str());
+            } else {
+                trigger_armed_.store(false, std::memory_order_release);
+                trigger_triggered_.store(true, std::memory_order_release);
+                LOG_INFO("Trigger", "Disabled (None)");
+            }
         } else if (cmd.find("\"set_timebase\"") != std::string::npos) {
             int value_us = proto_extract_int(cmd, "value_us", 500000);
             config_.timebase_us = value_us;
@@ -531,18 +702,48 @@ void LogicServer::handle_ws_frame(int fd, const WS_Frame& frame) {
             LOG_INFO("Server", "Cmd: run — resuming");
             paused_.store(false, std::memory_order_release);
             pending_reset_.store(true, std::memory_order_release);
+            // Si hay trigger configurado, asegurar que esta armado
+            // (bajo mutex para evitar data race con polling_loop)
+            {
+                std::lock_guard<std::mutex> lk(trigger_mutex_);
+                if (trigger_.pin >= 0 && trigger_.type != TriggerType::NONE) {
+                    trigger_armed_.store(true, std::memory_order_release);
+                    trigger_triggered_.store(false, std::memory_order_release);
+                    LOG_INFO("Trigger", "Re-armed on RUN: GPIO%d %s", trigger_.pin,
+                             TriggerConfig::type_to_string(trigger_.type).c_str());
+                }
+            }
         } else if (cmd.find("\"stop\"") != std::string::npos) {
             LOG_INFO("Server", "Cmd: stop — pausing");
             paused_.store(true, std::memory_order_release);
+            // Desarmar trigger al pausar
+            trigger_armed_.store(false, std::memory_order_release);
             // Limpiar buffers de salida para pausa instantanea
-            std::lock_guard<std::mutex> lk(clients_mutex_);
-            for (auto& [fd, st] : clients_) {
-                st.write_buf.clear();
+            {
+                std::lock_guard<std::mutex> lk(clients_mutex_);
+                for (auto& [fd, st] : clients_) {
+                    st.write_buf.clear();
+                }
             }
         } else if (cmd.find("\"single\"") != std::string::npos) {
             LOG_INFO("Server", "Cmd: single — one-shot");
             paused_.store(false, std::memory_order_release);
             single_request_.store(true, std::memory_order_release);
+            // Armar trigger si esta configurado (bajo mutex)
+            {
+                std::lock_guard<std::mutex> lk(trigger_mutex_);
+                if (trigger_.pin >= 0 && trigger_.type != TriggerType::NONE) {
+                    trigger_armed_.store(true, std::memory_order_release);
+                    trigger_triggered_.store(false, std::memory_order_release);
+                    LOG_INFO("Trigger", "Armed on SINGLE: GPIO%d %s", trigger_.pin,
+                             TriggerConfig::type_to_string(trigger_.type).c_str());
+                }
+            }
+        } else if (cmd.find("\"set_pretrig\"") != std::string::npos) {
+            int depth = proto_extract_int(cmd, "depth", (int)PRE_TRIG_DEFAULT);
+            if (depth < 0) depth = 0;
+            pre_trig_max_.store((size_t)depth, std::memory_order_release);
+            LOG_INFO("Pre-trigger", "Depth set to %zu samples", (size_t)depth);
         } else if (cmd.find("\"set_viewport\"") != std::string::npos) {
             // {"cmd":"set_viewport","zoom":1.5,"pan":123.0}
             float zoom = (float)proto_extract_int(cmd, "zoom", 100) / 100.0f;

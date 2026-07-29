@@ -581,6 +581,20 @@ html, body {
 
     <div class="toolbar-sep"></div>
 
+    <label>Pre</label>
+    <select id="pretrig-depth" onchange="setPreTrigDepth(this.value)" title="Pre-trigger samples">
+        <option value="0">Off</option>
+        <option value="64">64</option>
+        <option value="128">128</option>
+        <option value="256">256</option>
+        <option value="512" selected>512</option>
+        <option value="1024">1K</option>
+        <option value="2048">2K</option>
+        <option value="4096">4K</option>
+    </select>
+
+    <div class="toolbar-sep"></div>
+
     <label>Decoder</label>
     <select id="decoder-select" onchange="decoderSelect(this.value)">
         <option value="none">None</option>
@@ -615,6 +629,15 @@ html, body {
             <div><span class="label">▼ t:</span> <span class="val" id="cursor-tb">—</span></div>
             <div><span class="label">Δt:</span> <span class="val" id="cursor-dt">—</span></div>
             <div><span class="label">Freq:</span> <span class="val" id="cursor-freq">—</span></div>
+            <div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.08);" id="selection-info">
+                <div style="color:#6b7a8a;font-size:10px;font-weight:600;margin-bottom:4px;">SELECTION</div>
+                <div><span class="label">Bits:</span> <span class="val" id="sel-bits">—</span></div>
+                <div><span class="label">Bin:</span> <span class="val" id="sel-bin" style="font-family:monospace;font-size:10px;word-break:break-all;">—</span></div>
+                <div><span class="label">Hex:</span> <span class="val" id="sel-hex" style="font-family:monospace;">—</span></div>
+                <div><span class="label">Dec:</span> <span class="val" id="sel-dec" style="font-family:monospace;">—</span></div>
+                <div style="margin-top:4px;"><span class="label">Pulse:</span> <span class="val" id="sel-pulse">—</span></div>
+                <div><span class="label">Duty:</span> <span class="val" id="sel-duty">—</span></div>
+            </div>
         </div>
         <div id="infobar">
             <span><span class="highlight" id="ib-trigger">Trigger: —</span></span>
@@ -694,8 +717,8 @@ const state = {
     timeUsCache:    [],
     firstTsCache:   0,
 
-    // First-auto-fit flag: true = don't auto-fit on first data (user chose default 500ms)
-    _autoFitDone:   true,
+    // First-auto-fit flag: false = auto-fit on first data arrival (true timebase for buffer)
+    _autoFitDone:   false,
 
     // Channels
     channelLabels:  [],
@@ -706,6 +729,7 @@ const state = {
     triggerPin:     -1,
     triggerType:    'rising',
     triggerIndex:   -1,
+    preTrigDepth:   512,
 
     // Paused counter
     pausedSamples:  0,
@@ -1093,6 +1117,10 @@ function handleMessage(msg) {
         if (msg.pan_x !== undefined) {
             state.currentPanX = msg.pan_x;
         }
+        if (msg.pre_trig_depth !== undefined) {
+            state.preTrigDepth = msg.pre_trig_depth;
+            document.getElementById('pretrig-depth').value = String(msg.pre_trig_depth);
+        }
         if (msg.pins) {
             document.getElementById('info-pins').textContent = msg.pins.length;
         }
@@ -1191,6 +1219,13 @@ function sendLabelsToServer() {
     // El servidor guarda automaticamente al recibir set_labels
 }
 
+function setPreTrigDepth(val) {
+    state.preTrigDepth = parseInt(val);
+    if (state.connected) {
+        sendCommand({ cmd: 'set_pretrig', depth: state.preTrigDepth });
+    }
+}
+
 function updateTrigger() {
     const pin  = parseInt(document.getElementById('trigger-pin').value);
     const type = document.getElementById('trigger-type').value;
@@ -1204,7 +1239,9 @@ function updateTrigger() {
         badge.textContent = 'Trigger: —';
     }
 
-    if (state.connected && pin >= 0) {
+    // Siempre enviar config al servidor, incluso pin=-1 (None)
+    // para que desarme el trigger en el backend
+    if (state.connected) {
         sendCommand({ cmd: 'set_trigger', pin, type });
     }
 }
@@ -1383,6 +1420,53 @@ function onWheel(e) {
     debounceSendViewport();
 }
 
+function decodeSelectionBits(tA, tB, pin) {
+    // Extraer los bits de un pin entre dos tiempos
+    if (!state.timestamps || state.timestamps.length < 2) return '';
+    const timeUs = state.timeUsCache;
+    if (!timeUs || timeUs.length < 2) return '';
+
+    const tLo = Math.min(tA, tB);
+    const tHi = Math.max(tA, tB);
+
+    // Encontrar indices de samples dentro del rango
+    let iLo = 0, iHi = timeUs.length - 1;
+    for (let i = 0; i < timeUs.length; i++) {
+        if (timeUs[i] >= tLo) { iLo = Math.max(0, i - 1); break; }
+    }
+    for (let i = timeUs.length - 1; i >= 0; i--) {
+        if (timeUs[i] <= tHi) { iHi = Math.min(timeUs.length - 1, i + 1); break; }
+    }
+
+    if (iHi - iLo < 2) return '';
+
+    // Generar bitstream: mostrar TODAS las muestras, comprimiendo
+    // muestras consecutivas del mismo valor en un solo bit
+    let bits = '';
+    let lastBit = -1;
+    const maxDisplayBits = 64;
+    for (let i = iLo; i <= iHi && bits.length < maxDisplayBits; i++) {
+        const bit = (state.states[i] >> pin) & 1;
+        if (bit !== lastBit) {
+            bits += bit ? '1' : '0';
+            lastBit = bit;
+        }
+    }
+    // Indicar si se trunco
+    const totalTransitions = (() => {
+        let count = 0, lb = -1;
+        for (let i = iLo; i <= iHi; i++) {
+            const b = (state.states[i] >> pin) & 1;
+            if (b !== lb) { count++; lb = b; }
+        }
+        return count;
+    })();
+    if (totalTransitions > maxDisplayBits) {
+        bits += '… (+' + (totalTransitions - maxDisplayBits) + ' edges)';
+    }
+    return bits;
+}
+
 function updateCursorInfo() {
     const info = document.getElementById('cursor-info');
     if (state.cursorA && state.cursorB && state.cursorEnabled) {
@@ -1397,6 +1481,133 @@ function updateCursorInfo() {
         document.getElementById('cursor-dt').textContent = dt.toFixed(2) + ' µs';
         document.getElementById('cursor-freq').textContent =
             dt > 0 ? (1 / (dt * 1e-6)).toFixed(0) + ' Hz' : '—';
+
+        // === ANALISIS DE SELECCION ===
+        // Usar el primer pin habilitado para el analisis
+        let selPin = -1;
+        for (let ch = 0; ch < MAX_PINS; ch++) {
+            if (state.channelEnabled[ch]) { selPin = ALL_PINS[ch]; break; }
+        }
+
+        if (selPin >= 0) {
+            const bits = decodeSelectionBits(ta, tb, selPin);
+            const bitsEl = document.getElementById('sel-bin');
+            const hexEl  = document.getElementById('sel-hex');
+            const decEl  = document.getElementById('sel-dec');
+            const bitsCnt = document.getElementById('sel-bits');
+
+            if (bits && bits.length > 0) {
+                bitsCnt.textContent = bits.length + ' (GPIO' + selPin + ')';
+                // Mostrar binario (truncado si muy largo)
+                if (bits.length <= 64) {
+                    bitsEl.textContent = bits;
+                } else {
+                    bitsEl.textContent = bits.substring(0, 32) + '…' + bits.substring(bits.length - 16);
+                }
+                // Hex (agrupar de a 4 bits)
+                const padded = bits.length % 4 === 0 ? bits : '0'.repeat(4 - (bits.length % 4)) + bits;
+                let hexStr = '';
+                for (let i = 0; i < padded.length; i += 4) {
+                    const nibble = padded.substring(i, i + 4);
+                    hexStr += parseInt(nibble, 2).toString(16).toUpperCase();
+                }
+                // Truncar hex si muy largo
+                if (hexStr.length <= 16) {
+                    hexEl.textContent = '0x' + hexStr;
+                } else {
+                    hexEl.textContent = '0x' + hexStr.substring(0, 12) + '…';
+                }
+                // Decimal (hasta 64 bits)
+                if (bits.length <= 53) {
+                    const decVal = parseInt(bits, 2);
+                    if (!isNaN(decVal)) {
+                        decEl.textContent = decVal.toLocaleString();
+                    } else {
+                        decEl.textContent = '—';
+                    }
+                } else {
+                    decEl.textContent = '> 53 bits';
+                }
+            } else {
+                bitsEl.textContent = '—';
+                hexEl.textContent  = '—';
+                decEl.textContent  = '—';
+                bitsCnt.textContent = '—';
+            }
+
+            // === ANALISIS DE PULSO ===
+            // Medir ancho del pulso y duty cycle en la seleccion
+            const timeUs = state.timeUsCache;
+            let tLo = Math.min(ta, tb);
+            let tHi = Math.max(ta, tb);
+            let iStart = 0, iEnd = timeUs.length - 1;
+            for (let i = 0; i < timeUs.length; i++) {
+                if (timeUs[i] >= tLo) { iStart = Math.max(0, i - 1); break; }
+            }
+            for (let i = timeUs.length - 1; i >= 0; i--) {
+                if (timeUs[i] <= tHi) { iEnd = Math.min(timeUs.length - 1, i + 1); break; }
+            }
+
+            let pulseEl = document.getElementById('sel-pulse');
+            let dutyEl  = document.getElementById('sel-duty');
+            if (iEnd - iStart >= 3) {
+                let highUs = 0, lowUs = 0, prevT = timeUs[iStart];
+                let firstBit = (state.states[iStart] >> selPin) & 1;
+                let prevBit = firstBit;
+                for (let i = iStart + 1; i <= iEnd; i++) {
+                    const curBit = (state.states[i] >> selPin) & 1;
+                    if (curBit !== prevBit) {
+                        const dur = timeUs[i] - prevT;
+                        if (prevBit === 1) highUs += dur;
+                        else lowUs += dur;
+                        prevT = timeUs[i];
+                        prevBit = curBit;
+                    }
+                }
+                // Ultimo segmento
+                const lastDur = timeUs[iEnd] - prevT;
+                if (prevBit === 1) highUs += lastDur;
+                else lowUs += lastDur;
+
+                const total = highUs + lowUs;
+                if (total > 0) {
+                    const highStr = highUs >= 1000 ? (highUs/1000).toFixed(2) + 'ms' : highUs.toFixed(1) + 'µs';
+                    const lowStr  = lowUs  >= 1000 ? (lowUs/1000).toFixed(2) + 'ms' : lowUs.toFixed(1) + 'µs';
+                    const dutyStr = (highUs / total * 100).toFixed(1) + '%';
+                    let periodStr = '';
+                    // Buscar periodos
+                    let edges = [];
+                    for (let i = iStart + 1; i <= iEnd; i++) {
+                        const curBit = (state.states[i] >> selPin) & 1;
+                        const prevBit = (state.states[i-1] >> selPin) & 1;
+                        if (curBit !== prevBit) edges.push(timeUs[i]);
+                    }
+                    if (edges.length >= 3) {
+                        const avgPeriod = (edges[edges.length-1] - edges[0]) / ((edges.length-1) / 2);
+                        if (avgPeriod > 0 && !isNaN(avgPeriod)) {
+                            periodStr = avgPeriod >= 1000 ? (avgPeriod/1000).toFixed(2) + 'ms' : avgPeriod.toFixed(1) + 'µs';
+                            const freqHz = avgPeriod > 0 ? (1e6 / avgPeriod) : 0;
+                            periodStr += ' (' + freqHz.toFixed(0) + ' Hz)';
+                        }
+                    }
+                    pulseEl.textContent = 'H=' + highStr + ' L=' + lowStr + ' | Period: ' + (periodStr || '—');
+                    dutyEl.textContent = dutyStr;
+                } else {
+                    pulseEl.textContent = '—';
+                    dutyEl.textContent  = '—';
+                }
+            } else {
+                pulseEl.textContent = '—';
+                dutyEl.textContent  = '—';
+            }
+        } else {
+            document.getElementById('sel-bin').textContent = '—';
+            document.getElementById('sel-hex').textContent  = '—';
+            document.getElementById('sel-dec').textContent  = '—';
+            document.getElementById('sel-bits').textContent = '—';
+            document.getElementById('sel-pulse').textContent = '—';
+            document.getElementById('sel-duty').textContent  = '—';
+        }
     } else if ((state.cursorA || state.cursorB) && state.cursorEnabled) {
         info.classList.add('show');
         const t = state.cursorA ? pixelsToTime(state.cursorA.x) : pixelsToTime(state.cursorB.x);
@@ -1406,6 +1617,13 @@ function updateCursorInfo() {
             (state.cursorB ? pixelsToTime(state.cursorB.x) : '—').toFixed(2) + ' µs';
         document.getElementById('cursor-dt').textContent = '—';
         document.getElementById('cursor-freq').textContent = '—';
+        // Limpiar seccion de seleccion
+        document.getElementById('sel-bin').textContent   = '—';
+        document.getElementById('sel-hex').textContent   = '—';
+        document.getElementById('sel-dec').textContent   = '—';
+        document.getElementById('sel-bits').textContent  = '—';
+        document.getElementById('sel-pulse').textContent = '—';
+        document.getElementById('sel-duty').textContent  = '—';
     } else {
         info.classList.remove('show');
     }
@@ -1708,14 +1926,39 @@ function render(timestamp) {
         ctx.lineTo(rightX, prevBit ? yHigh : yLow);
 
         ctx.stroke();
-    }
-
-    // === DRAW TRIGGER MARKER ===
+    }    // === DRAW TRIGGER MARKER + PRE-TRIGGER ZONE ===
     if (state.triggerPin >= 0 && state.triggerIndex >= 0 &&
         state.triggerIndex < state.timestamps.length) {
         const t = timeUs[state.triggerIndex];
         if (t >= tMin && t <= tMax) {
             const x = marginL + ((t - tMin) / visibleTime) * plotW;
+
+            // Pre-trigger zone (sombreado detras del trigger)
+            if (state.preTrigDepth > 0 && state.triggerIndex > 0) {
+                const preT = timeUs[Math.max(0, state.triggerIndex - state.preTrigDepth)];
+                const preX = marginL + Math.max(0, (preT - tMin) / visibleTime) * plotW;
+                ctx.fillStyle = 'rgba(255,107,107,0.06)';
+                ctx.fillRect(preX, marginTop, x - preX, MAX_PINS * chH);
+                // Linea vertical delimitando zona pre-trigger
+                ctx.strokeStyle = 'rgba(255,107,107,0.15)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([3, 3]);
+                ctx.beginPath();
+                ctx.moveTo(preX, marginTop);
+                ctx.lineTo(preX, marginTop + MAX_PINS * chH);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Marcador principal del trigger (linea vertical roja)
+            ctx.strokeStyle = 'rgba(255,107,107,0.5)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x, marginTop);
+            ctx.lineTo(x, marginTop + MAX_PINS * chH);
+            ctx.stroke();
+
+            // Triangulo indicador arriba
             ctx.fillStyle = '#FF6B6B';
             ctx.beginPath();
             ctx.moveTo(x, marginTop - 2);
@@ -1727,7 +1970,7 @@ function render(timestamp) {
             ctx.fillStyle = '#FF6B6B';
             ctx.font = '9px system-ui, sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText('▲', x, marginTop - 12);
+            ctx.fillText('T', x, marginTop - 14);
         }
     }
 

@@ -47,7 +47,8 @@ std::string proto_build_config(int timebase_us, int trigger_pin,
                                const std::string& decoder_json,
                                const std::string& pins_json,
                                float zoom_level,
-                               float pan_x) {
+                               float pan_x,
+                               int pre_trig_depth) {
     return "{\"type\":\"config\""
            ",\"timebase_us\":" + std::to_string(timebase_us) +
            ",\"trigger_pin\":" + std::to_string(trigger_pin) +
@@ -57,6 +58,7 @@ std::string proto_build_config(int timebase_us, int trigger_pin,
            ",\"decoder\":" + decoder_json +
            ",\"zoom_level\":" + std::to_string(zoom_level) +
            ",\"pan_x\":" + std::to_string(pan_x) +
+           ",\"pre_trig_depth\":" + std::to_string(pre_trig_depth) +
            ",\"pins\":" + pins_json +
            "}";
 }

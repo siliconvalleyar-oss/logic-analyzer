@@ -147,8 +147,17 @@ private:
     std::atomic<bool> single_request_{false};
     std::atomic<bool> pending_reset_{false};
 
-    // Trigger
-    TriggerConfig trigger_;
+    // Trigger (protegido por mutex por acceso desde WS y polling threads)
+    TriggerConfig        trigger_;
+    std::mutex           trigger_mutex_;
+    std::atomic<bool>    trigger_armed_{false};
+    std::atomic<bool>    trigger_triggered_{false};
+
+    // Pre-trigger buffer: almacena muestras antes del disparo
+    static constexpr size_t PRE_TRIG_DEFAULT = 512; // ~1ms a 500kHz
+    std::vector<Sample>     pre_trig_buffer_;
+    std::atomic<size_t>     pre_trig_max_{PRE_TRIG_DEFAULT};
+    std::atomic<uint64_t>   trigger_timestamp_ns_{0}; // ts del sample que disparo
 };
 
 #endif // LOGIC_SERVER_H

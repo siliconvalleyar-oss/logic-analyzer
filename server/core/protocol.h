@@ -55,7 +55,8 @@ std::string proto_build_config(int timebase_us, int trigger_pin,
                                const std::string& decoder_json = "null",
                                const std::string& pins_json = "[]",
                                float zoom_level = 1.0f,
-                               float pan_x = 0.0f);
+                               float pan_x = 0.0f,
+                               int pre_trig_depth = 512);
 
 /**
  * Construye un JSON de labels a partir de un map pin->label.
