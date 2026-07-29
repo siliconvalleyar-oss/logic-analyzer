@@ -23,12 +23,12 @@ logic_analizer_rpi/
 ├── web/
 │   └── index.html         # Frontend web (Canvas + decodificadores)
 └── docs/
-    ├── architecture.md    # Arquitectura del sistema
-    ├── setup.md           # Hardware: pines, conexion, instalacion
-    ├── protocol.md        # Protocolo WebSocket JSON
-    ├── firmware-pi.md     # Server Python y C++
-    ├── decoders.md        # I2C, UART, SPI, PWM decodificadores
-    └── troubleshooting.md # Problemas comunes y soluciones
+    ├── ARCHITECTURE.md    # Arquitectura del sistema
+    ├── SETUP.md           # Hardware: pines, conexion, instalacion
+    ├── PROTOCOL.md        # Protocolo WebSocket JSON
+    ├── FIRMWARE-PI.md     # Server Python y C++
+    ├── DECODERS.md        # I2C, UART, SPI, PWM decodificadores
+    └── TROUBLESHOOTING.md # Problemas comunes y soluciones
 ```
 
 ## Arranque rapido

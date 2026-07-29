@@ -468,7 +468,7 @@ make
 ```
 
 ## Arquitectura
-Ver docs/architecture.md
+Ver docs/ARCHITECTURE.md
 
 ## Tests
 ```bash
@@ -570,13 +570,13 @@ logic_analizer_rpi/
 │   ├── README.md           # Indice de documentacion
 │   ├── PROMPT.md           # Prompt completo para IA
 │   ├── REQUISITOS.md       # Este archivo
-│   ├── architecture.md     # Arquitectura
-│   ├── setup.md            # Hardware setup
-│   ├── protocol.md         # WebSocket protocolo
-│   ├── firmware-pi.md      # Server firmware
-│   ├── decoders.md         # Protocol decoders
+│   ├── ARCHITECTURE.md     # Arquitectura
+│   ├── SETUP.md            # Hardware setup
+│   ├── PROTOCOL.md         # WebSocket protocolo
+│   ├── FIRMWARE-PI.md      # Server firmware
+│   ├── DECODERS.md         # Protocol decoders
 │   ├── web-ui.md           # Frontend web
-│   └── troubleshooting.md  # Problemas comunes
+│   └── TROUBLESHOOTING.md  # Problemas comunes
 │
 └── tests/
     ├── test_buffer.cpp     # Ring buffer tests
