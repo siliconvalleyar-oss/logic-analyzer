@@ -411,14 +411,16 @@ void LogicServer::handle_ws_frame(int fd, const WS_Frame& frame) {
             std::string type = proto_extract_string(cmd, "type");
             trigger_.pin  = pin;
             trigger_.type = TriggerConfig::from_string(type);
-            // Persistir en config
+            // Persistir en config y guardar
             config_.trigger_pin  = pin;
             config_.trigger_type = type;
-            LOG_INFO("Trigger", "GPIO%d %s", pin, type.c_str());
+            config_save_file(config_);
+            LOG_INFO("Trigger", "GPIO%d %s — config saved", pin, type.c_str());
         } else if (cmd.find("\"set_timebase\"") != std::string::npos) {
             int value_us = proto_extract_int(cmd, "value_us", 500000);
             config_.timebase_us = value_us;
-            LOG_INFO("Server", "Timebase set to %d us/div", value_us);
+            config_save_file(config_);
+            LOG_INFO("Server", "Timebase set to %d us/div — config saved", value_us);
         } else if (cmd.find("\"set_labels\"") != std::string::npos) {
             // Parse labels from JSON: {"cmd":"set_labels","labels":{"2":"CLK","3":"DATA"}}
             config_.channel_labels.clear();
@@ -453,7 +455,8 @@ void LogicServer::handle_ws_frame(int fd, const WS_Frame& frame) {
                     }
                 }
             }
-            LOG_INFO("Server", "Labels updated (%zu entries)", config_.channel_labels.size());
+            config_save_file(config_);
+            LOG_INFO("Server", "Labels updated (%zu entries) — config saved", config_.channel_labels.size());
         } else if (cmd.find("\"save_config\"") != std::string::npos) {
             LOG_INFO("Server", "Saving config to config.json");
             config_save_file(config_);

@@ -846,11 +846,9 @@ function setMode(mode) {
 function setTimebase(val) {
     state.timebaseUs = parseInt(val);
     updatePixelsPerUs();
-    // Enviar timebase al servidor remoto para persistencia
+    // Enviar timebase al servidor remoto (auto-guarda en config.json)
     if (state.connected) {
         sendCommand({ cmd: 'set_timebase', value_us: state.timebaseUs });
-        // Solicitar guardar configuracion en la Raspberry Pi
-        sendCommand({ cmd: 'save_config' });
     }
 }
 
@@ -889,7 +887,7 @@ function sendLabelsToServer() {
         }
     }
     sendCommand({ cmd: 'set_labels', labels });
-    sendCommand({ cmd: 'save_config' });
+    // El servidor guarda automaticamente al recibir set_labels
 }
 
 function updateTrigger() {
