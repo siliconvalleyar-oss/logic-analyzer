@@ -1364,11 +1364,30 @@ function handleKeyDown(e) {
             break;
         case 't':
             e.preventDefault();
-            {
+            if (state.decoder.active && state.decoder.type !== 'none') {
+                // Alternar panel del decodificador
+                const panel = document.getElementById('decoder-config');
+                const results = document.getElementById('decoder-results');
+                if (panel) {
+                    const isOpen = panel.classList.contains('active');
+                    panel.classList.toggle('active');
+                    if (results) results.classList.toggle('active');
+                    // Si cerramos, enfocar trigger; si abrimos, enfocar primer select de pines
+                    if (isOpen) {
+                        const sel = document.getElementById('trigger-pin');
+                        if (sel) sel.focus();
+                    } else {
+                        const firstPin = panel.querySelector('select');
+                        if (firstPin) firstPin.focus();
+                    }
+                }
+                flashKeyHint('trigger');
+            } else {
+                // Sin decoder activo: enfocar trigger
                 const sel = document.getElementById('trigger-pin');
                 if (sel) sel.focus();
+                flashKeyHint('trigger');
             }
-            flashKeyHint('trigger');
             break;
     }
 }
