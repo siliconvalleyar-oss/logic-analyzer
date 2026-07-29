@@ -24,7 +24,8 @@
  */
 std::string proto_build_waveform(const std::vector<Sample>& samples,
                                  const std::string& pins_json,
-                                 int rate_hz, int trigger_idx);
+                                 int rate_hz, int trigger_idx,
+                                 bool reset = false);
 
 /**
  * Construye un mensaje JSON de tipo "state".

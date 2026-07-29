@@ -377,7 +377,7 @@ html, body {
     <select id="timebase" onchange="setTimebase(this.value)">
         <option value="1">1 µs/div</option>
         <option value="5">5 µs/div</option>
-        <option value="10">10 µs/div</option>
+        <option value="10" selected>10 µs/div</option>
         <option value="50">50 µs/div</option>
         <option value="100">100 µs/div</option>
         <option value="500">500 µs/div</option>
@@ -386,7 +386,7 @@ html, body {
         <option value="10000">10 ms/div</option>
         <option value="50000">50 ms/div</option>
         <option value="100000">100 ms/div</option>
-        <option value="500000" selected>500 ms/div</option>
+        <option value="500000">500 ms/div</option>
     </select>
 
     <div class="toolbar-sep"></div>
@@ -652,9 +652,11 @@ function connect(url) {
         setStatus('disconnected');
         state.connected = false;
         // Clear decoder state on disconnect
+        state._autoFitDone = false;
         state.decoder.frames = [];
         state.decoder.lastDecodeIdx = 0;
         document.getElementById('decoder-results-inner').innerHTML = '';
+        document.getElementById('timebase').value = '10';  // reset timebase select
         // Auto reconnect after 3 seconds (with guard to prevent stacking)
         scheduleReconnect();
     };
@@ -725,6 +727,11 @@ function setStatus(status) {
 // ============================================================
 function handleMessage(msg) {
     if (msg.type === 'waveform') {
+        // Clear buffer on reset flag (e.g. after stop→run)
+        if (msg.reset) {
+            state.timestamps = [];
+            state.states = [];
+        }
         // Append new data (use concat for safe large-array handling)
         if (msg.timestamps && msg.states) {
             state.timestamps = state.timestamps.concat(msg.timestamps);
@@ -756,6 +763,16 @@ function handleMessage(msg) {
 
             // Update rate if provided
             if (msg.rate) state.sampleRate = msg.rate;
+
+            // Auto-fit timebase la primera vez que llegan datos
+            if (!state._autoFitDone && state.timestamps.length >= 2) {
+                const dataDur = (state.timestamps[state.timestamps.length-1] - state.timestamps[0]) / 1000;
+                const visibleTime = state.timebaseUs * 10 / state.zoomLevel;
+                if (dataDur > 0 && dataDur < visibleTime / 5) {
+                    autoFitTimebase();
+                }
+                state._autoFitDone = true;
+            }
 
             // Update info
             document.getElementById('info-samples').textContent = state.timestamps.length;
@@ -798,6 +815,30 @@ function setMode(mode) {
 function setTimebase(val) {
     state.timebaseUs = parseInt(val);
     updatePixelsPerUs();
+}
+
+function autoFitTimebase() {
+    // Calcula el timebase optimo para que los datos llenen ~80% del viewport
+    const len = state.timestamps.length;
+    if (len < 2) return;
+    const dataDurationUs = (state.timestamps[len-1] - state.timestamps[0]) / 1000;
+    if (dataDurationUs <= 0) return;
+    // Queremos que la ventana visible (timebase*10) sea ~1.25x la duracion de datos
+    const idealTimebase = dataDurationUs / 8;  // 8 divisiones con margen
+    const TIMEBASES = [1,5,10,50,100,500,1000,5000,10000,50000,100000,500000];
+    // Elegir el timebase que mas se aproxime (redondeando hacia arriba para que quepa)
+    let best = TIMEBASES[0];
+    for (const tb of TIMEBASES) {
+        if (tb >= idealTimebase) { best = tb; break; }
+        best = tb;
+    }
+    state.timebaseUs = best;
+    state.zoomLevel = 1;
+    state.currentPanX = 0;
+    updatePixelsPerUs();
+    // Sincronizar el select HTML
+    const sel = document.getElementById('timebase');
+    sel.value = String(best);
 }
 
 function updateTrigger() {
@@ -859,7 +900,13 @@ function exportCSV() {
 function resetZoom() {
     state.zoomLevel = 1;
     state.currentPanX = 0;
-    updatePixelsPerUs();
+    // Auto-fit timebase a los datos disponibles
+    const len = state.timestamps.length;
+    if (len >= 2) {
+        autoFitTimebase();
+    } else {
+        updatePixelsPerUs();
+    }
 }
 
 // ============================================================
@@ -1064,7 +1111,6 @@ function render(timestamp) {
     const marginR = 50;
     const marginTop = 5;
     const plotW = W - marginL - marginR;
-    const visibleCount = Math.min(state.timestamps.length, state.maxSamples);
 
     // Calculate visible time range
     const totalTime = state.timebaseUs * 10;
@@ -1074,7 +1120,6 @@ function render(timestamp) {
 
     // Use pre-computed cached timeUs array (rebuilt only on new data)
     const timeUs = state.timeUsCache;
-    const firstTs = state.firstTsCache;
 
     // Determine which samples are visible
     let visStart = 0, visEnd = timeUs.length - 1;
@@ -1087,18 +1132,6 @@ function render(timestamp) {
 
     const drawStart = Math.max(0, visStart);
     const drawEnd   = Math.min(timeUs.length, visEnd + 1);
-
-    if (drawEnd - drawStart < 2) {
-        // Not enough visible data
-        ctx.fillStyle = '#1a1a35';
-        ctx.font = '14px system-ui, sans-serif';
-        ctx.fillStyle = '#3a3a6a';
-        ctx.textAlign = 'center';
-        ctx.fillText('Zoom in or adjust timebase', W/2, H/2);
-        ctx.restore();
-        requestAnimationFrame(render);
-        return;
-    }
 
     // === DRAW GRID ===
     ctx.strokeStyle = 'rgba(255,255,255,0.04)';
@@ -1140,44 +1173,60 @@ function render(timestamp) {
         ctx.fillText(label, x, marginTop + MAX_PINS * chH + 14);
     }
 
-    // === DRAW WAVEFORMS ===
+    // === DRAW WAVEFORMS (señal continua 100% ancho) ===
     for (let ch = 0; ch < MAX_PINS; ch++) {
         if (!state.channelEnabled[ch]) continue;
 
         const pin = ALL_PINS[ch];
-        const yCenter = marginTop + ch * chH + chH / 2;
         const yHigh = marginTop + ch * chH + 2;
         const yLow  = marginTop + ch * chH + chH - 2;
+        const leftX = marginL;
+        const rightX = W - marginR;
 
         ctx.strokeStyle = COLORS[ch % COLORS.length];
         ctx.lineWidth = 1.5;
         ctx.beginPath();
 
-        let prevState = -1;
-        let prevX = marginL;
+        // Estado lógico en el borde izquierdo (sample más cercano a tMin)
+        const s0 = (state.states[drawStart] >> pin) & 1;
+        const y0 = s0 ? yHigh : yLow;
+
+        // Comenzar desde el borde izquierdo de la ventana
+        ctx.moveTo(leftX, y0);
+
+        // Si no hay suficientes samples, dibujar línea plana y continuar
+        if (drawEnd - drawStart < 2) {
+            ctx.lineTo(rightX, y0);
+            ctx.stroke();
+            continue;
+        }
+
+        // Dibujar todos los samples visibles
+        let prevBit = s0;
 
         for (let i = drawStart; i < drawEnd; i++) {
             const t = timeUs[i];
             const x = marginL + ((t - tMin) / visibleTime) * plotW;
-            if (x < marginL) { prevState = -1; continue; }
-            if (x > W - marginR) break;
+            if (x < leftX) continue;
+            if (x > rightX) break;
 
             const bit = (state.states[i] >> pin) & 1;
             const y = bit ? yHigh : yLow;
 
-            if (prevState === -1) {
-                ctx.moveTo(x, y);
-            } else if (bit !== prevState) {
-                // Draw vertical transition
-                ctx.lineTo(x, bit ? yLow : yHigh);
+            if (bit !== prevBit) {
+                // Transición vertical: línea horizontal hasta el punto de cambio, luego vertical
+                ctx.lineTo(x, prevBit ? yLow : yHigh);
                 ctx.lineTo(x, y);
+                prevBit = bit;
             } else {
+                // Mismo estado: extender línea horizontal
                 ctx.lineTo(x, y);
             }
-
-            prevState = bit;
-            prevX = x;
         }
+
+        // Extender hasta el borde derecho con el último estado
+        ctx.lineTo(rightX, prevBit ? yHigh : yLow);
+
         ctx.stroke();
     }
 

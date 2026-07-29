@@ -8,7 +8,8 @@
 
 std::string proto_build_waveform(const std::vector<Sample>& samples,
                                  const std::string& pins_json,
-                                 int rate_hz, int trigger_idx) {
+                                 int rate_hz, int trigger_idx,
+                                 bool reset) {
     if (samples.empty()) return "";
 
     std::string json = "{\"type\":\"waveform\",\"pins\":" + pins_json;
@@ -27,6 +28,7 @@ std::string proto_build_waveform(const std::vector<Sample>& samples,
     json += ",\"rate\":" + std::to_string(rate_hz);
     json += ",\"samples\":" + std::to_string(samples.size());
     json += ",\"trigger_index\":" + std::to_string(trigger_idx);
+    if (reset) json += ",\"reset\":true";
     json += "}";
     return json;
 }

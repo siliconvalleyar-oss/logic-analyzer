@@ -145,6 +145,7 @@ private:
     // Control (run/stop/single)
     std::atomic<bool> paused_{false};
     std::atomic<bool> single_request_{false};
+    std::atomic<bool> pending_reset_{false};
 
     // Trigger
     TriggerConfig trigger_;

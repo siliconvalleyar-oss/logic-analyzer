@@ -186,9 +186,11 @@ void LogicServer::broadcast_loop() {
                           samples.begin() + (samples.size() - MAX_SAMPLES_PER_BURST));
         }
 
+        bool need_reset = pending_reset_.exchange(false, std::memory_order_acq_rel);
+
         int trig_idx = trigger_find_index(samples, trigger_);
         std::string json = proto_build_waveform(
-            samples, pj, config_.sample_rate_hz, trig_idx);
+            samples, pj, config_.sample_rate_hz, trig_idx, need_reset);
         std::string frame = ws_encode_text(json);
 
         std::lock_guard<std::mutex> lk(clients_mutex_);
@@ -406,6 +408,7 @@ void LogicServer::handle_ws_frame(int fd, const WS_Frame& frame) {
         } else if (cmd.find("\"run\"") != std::string::npos) {
             LOG_INFO("Server", "Cmd: run — resuming");
             paused_.store(false, std::memory_order_release);
+            pending_reset_.store(true, std::memory_order_release);
         } else if (cmd.find("\"stop\"") != std::string::npos) {
             LOG_INFO("Server", "Cmd: stop — pausing");
             paused_.store(true, std::memory_order_release);
