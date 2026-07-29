@@ -121,6 +121,21 @@ html, body {
     font-size:11px; color:#FF6B6B;
 }
 
+#pause-badge {
+    display:none;
+    align-items:center; gap:6px;
+    padding:4px 14px; border-radius:20px;
+    background:rgba(255,193,7,0.12); border:1px solid rgba(255,193,7,0.4);
+    font-size:11px; font-weight:700; color:#FFC107;
+    letter-spacing:0.5px;
+    animation:pulse-pause 1.5s ease-in-out infinite;
+}
+#pause-badge.show { display:inline-flex; }
+@keyframes pulse-pause {
+    0%,100% { opacity:0.7; box-shadow:0 0 4px rgba(255,193,7,0.1); }
+    50%     { opacity:1;   box-shadow:0 0 10px rgba(255,193,7,0.3); }
+}
+
 /* ============================================================
    MAIN AREA
    ============================================================ */
@@ -370,6 +385,7 @@ html, body {
     <button class="run active"    onclick="setMode('run')">▶ RUN</button>
     <button class="stop"          onclick="setMode('stop')">■ STOP</button>
     <button class="single"        onclick="setMode('single')">⚡ SINGLE</button>
+    <span id="pause-badge">⏸ PAUSED</span>
 
     <div class="toolbar-sep"></div>
 
@@ -837,6 +853,14 @@ function setMode(mode) {
     if (mode === 'run') document.querySelector('#toolbar button.run').classList.add('active');
     else if (mode === 'stop') document.querySelector('#toolbar button.stop').classList.add('active');
     else if (mode === 'single') document.querySelector('#toolbar button.single').classList.add('active');
+
+    // Mostrar/ocultar badge PAUSED
+    const pauseBadge = document.getElementById('pause-badge');
+    if (mode === 'stop') {
+        pauseBadge.classList.add('show');
+    } else {
+        pauseBadge.classList.remove('show');
+    }
 
     if (state.connected) {
         sendCommand({ cmd: mode });
