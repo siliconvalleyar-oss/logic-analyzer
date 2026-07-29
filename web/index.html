@@ -257,6 +257,103 @@ html, body {
 #connect-dialog .card button:active { transform:translateY(0); }
 
 /* ============================================================
+   DECODER PANEL
+   ============================================================ */
+#decoder-config {
+    display:none;
+    background:#0d0d1a; border-left:1px solid #1e1e3a;
+    width:280px; min-width:280px;
+    overflow-y:auto;
+    padding:12px;
+}
+#decoder-config.active { display:block; }
+#decoder-config h3 {
+    font-size:13px; color:#4ECDC4; margin-bottom:12px;
+    font-weight:700; letter-spacing:0.5px;
+}
+#decoder-config .decoder-pin-row {
+    display:flex; align-items:center; gap:8px;
+    margin-bottom:8px;
+}
+#decoder-config .decoder-pin-row label {
+    font-size:11px; color:#6b7a8a; min-width:40px;
+    font-weight:600;
+}
+#decoder-config .decoder-pin-row select {
+    flex:1; padding:4px 6px;
+    background:#16163a; border:1px solid #2a2a5a; border-radius:4px;
+    color:#c8d6e5; font-size:11px; font-family:inherit;
+    cursor:pointer;
+}
+#decoder-config .decoder-pin-row select:focus { outline:none; border-color:#4ECDC4; }
+#decoder-config .decoder-opt-row {
+    display:flex; align-items:center; gap:8px;
+    margin-bottom:8px;
+}
+#decoder-config .decoder-opt-row label {
+    font-size:11px; color:#6b7a8a; min-width:40px; font-weight:600;
+}
+#decoder-config .decoder-opt-row select,
+#decoder-config .decoder-opt-row input {
+    flex:1; padding:4px 6px;
+    background:#16163a; border:1px solid #2a2a5a; border-radius:4px;
+    color:#c8d6e5; font-size:11px; font-family:inherit;
+}
+#decoder-config .decoder-opt-row input:focus,
+#decoder-config .decoder-opt-row select:focus { outline:none; border-color:#4ECDC4; }
+.decoder-config-hint {
+    font-size:10px; color:#3a3a6a; margin-top:-4px; margin-bottom:10px;
+    line-height:1.4;
+}
+
+#decoder-results {
+    display:none;
+    background:#101025; border-top:1px solid #1e1e3a;
+    height:160px; min-height:100px;
+    overflow-y:auto;
+    padding:8px 12px;
+    font-family:'Consolas','Courier New',monospace;
+    font-size:11px;
+}
+#decoder-results.active { display:block; }
+#decoder-results .dr-header {
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:6px;
+    color:#6b7a8a; font-size:11px; font-family:system-ui,sans-serif;
+}
+#decoder-results .dr-header button {
+    background:none; border:1px solid #2a2a5a; border-radius:4px;
+    color:#6b7a8a; font-size:10px; padding:2px 8px; cursor:pointer;
+    font-family:inherit;
+}
+#decoder-results .dr-header button:hover {
+    background:#1a1a35; border-color:#3a3a7a;
+}
+.dr-line {
+    padding:2px 0; border-bottom:1px solid rgba(255,255,255,0.03);
+    color:#c8d6e5;
+    white-space:pre;
+}
+.dr-line .dr-time { color:#6b7a8a; }
+.dr-line .dr-label-i2c { color:#4ECDC4; }
+.dr-line .dr-label-uart { color:#FFEAA7; }
+.dr-line .dr-label-spi { color:#BB8FCE; }
+.dr-line .dr-addr { color:#45B7D1; font-weight:600; }
+.dr-line .dr-data { color:#96CEB4; }
+.dr-line .dr-ack { color:#4ECDC4; }
+.dr-line .dr-nack { color:#FF6B6B; }
+.dr-line .dr-error { color:#FF6B6B; }
+.dr-line .dr-warn { color:#FFEAA7; }
+
+/* ============================================================
+   DECODER ANNOTATIONS ON CANVAS
+   ============================================================ */
+#decoder-annotations {
+    position:absolute; top:0; left:0; right:0; bottom:0;
+    pointer-events:none; z-index:5;
+}
+
+/* ============================================================
    RESPONSIVE
    ============================================================ */
 @media (max-width:768px) {
@@ -342,6 +439,16 @@ html, body {
 
     <div class="toolbar-sep"></div>
 
+    <label>Decoder</label>
+    <select id="decoder-select" onchange="decoderSelect(this.value)">
+        <option value="none">None</option>
+        <option value="i2c">I²C</option>
+        <option value="uart">UART</option>
+        <option value="spi">SPI</option>
+    </select>
+
+    <div class="toolbar-sep"></div>
+
     <button onclick="toggleCursors()">☰ Cursors</button>
     <button onclick="exportCSV()">📥 CSV</button>
     <button onclick="resetZoom()">⟲ Fit</button>
@@ -365,8 +472,23 @@ html, body {
             <span>Samples: <span class="highlight" id="ib-samples">0</span></span>
             <span>Zoom: <span class="highlight" id="ib-zoom">1x</span></span>
             <span id="ib-cursor">Cursor: —</span>
+            <span id="ib-decoder" style="margin-left:auto;">Decoder: <span class="highlight">None</span></span>
+        </div>
+        <div id="decoder-annotations"></div>
+    </div>
+    <div id="decoder-config">
+        <h3>Protocol Decoder</h3>
+        <div id="decoder-config-inner">
+            <p style="color:#3a3a6a;font-size:11px;">Select a decoder from the toolbar to configure pins.</p>
         </div>
     </div>
+</div>
+<div id="decoder-results">
+    <div class="dr-header">
+        <span>Decoder Results</span>
+        <button onclick="clearDecoderResults()">Clear</button>
+    </div>
+    <div id="decoder-results-inner"></div>
 </div>
 
 <!-- ============================================================
@@ -558,6 +680,10 @@ function connect() {
     state.ws.onclose = () => {
         setStatus('disconnected');
         state.connected = false;
+        // Clear decoder state on disconnect
+        state.decoder.frames = [];
+        state.decoder.lastDecodeIdx = 0;
+        document.getElementById('decoder-results-inner').innerHTML = '';
         // Show connect dialog again for reconnection
         document.getElementById('connect-dialog').classList.remove('hidden');
         document.getElementById('ws-url').focus();
@@ -632,6 +758,12 @@ function handleMessage(msg) {
             document.getElementById('info-samples').textContent = state.timestamps.length;
             document.getElementById('info-rate').textContent =
                 (state.sampleRate / 1e6).toFixed(1) + ' MHz';
+
+            // Run protocol decoder on new data
+            if (state.decoder.active) {
+                runDecoder();
+                capDecoderFrames();
+            }
         }
     } else if (msg.type === 'state') {
         document.getElementById('info-rate').textContent =
@@ -1072,6 +1204,9 @@ function render(timestamp) {
         }
     }
 
+    // === DRAW DECODER ANNOTATIONS ===
+    drawDecoderAnnotations(ctx, W, H, chH, marginL, marginR, marginTop, tMin, tMax, visibleTime, plotW);
+
     // === DRAW CURSORS ===
     if (state.cursorEnabled) {
         const drawCursor = (cursor, color, label) => {
@@ -1118,6 +1253,655 @@ function render(timestamp) {
 }
 
 // ============================================================
+// PROTOCOL DECODERS — I²C, UART, SPI
+// ============================================================
+
+// --- Decoder state extension ---
+state.decoder = {
+    type: 'none',
+    pins: { scl: -1, sda: -1, rx: -1, tx: -1, sclk: -1, mosi: -1, miso: -1, cs: -1 },
+    config: {
+        baud: 115200, dataBits: 8, parity: 'none', stopBits: 1,
+        cpol: 0, cpha: 0, bitOrder: 'msb'
+    },
+    frames: [],
+    lastDecodeIdx: 0,
+    active: false
+};
+
+// Decoder configuration UI per protocol type
+const DECODER_PIN_CONFIGS = {
+    i2c: {
+        label: 'I²C',
+        pins: [
+            { id: 'scl',  label: 'SCL', default: 3 },
+            { id: 'sda',  label: 'SDA', default: 2 }
+        ],
+        opts: []
+    },
+    uart: {
+        label: 'UART',
+        pins: [
+            { id: 'rx', label: 'RX', default: 15 },
+            { id: 'tx', label: 'TX (opt)', default: 14 }
+        ],
+        opts: [
+            { id: 'baud', label: 'Baud', type: 'select',
+              options: ['9600','19200','38400','57600','115200','230400','460800','921600'],
+              default: '115200' },
+            { id: 'dataBits', label: 'Bits', type: 'select',
+              options: ['7','8','9'], default: '8' },
+            { id: 'parity', label: 'Parity', type: 'select',
+              options: ['none','even','odd'], default: 'none' },
+            { id: 'stopBits', label: 'Stop', type: 'select',
+              options: ['1','1.5','2'], default: '1' }
+        ]
+    },
+    spi: {
+        label: 'SPI',
+        pins: [
+            { id: 'sclk', label: 'SCLK', default: 11 },
+            { id: 'mosi', label: 'MOSI', default: 10 },
+            { id: 'miso', label: 'MISO', default: 9 },
+            { id: 'cs',   label: 'CS',   default: 8 }
+        ],
+        opts: [
+            { id: 'cpol', label: 'CPOL', type: 'select',
+              options: ['0 (idle low)','1 (idle high)'], default: '0 (idle low)' },
+            { id: 'cpha', label: 'CPHA', type: 'select',
+              options: ['0 (lead edge)','1 (trail edge)'], default: '0 (lead edge)' },
+            { id: 'bitOrder', label: 'Order', type: 'select',
+              options: ['msb','lsb'], default: 'msb' }
+        ]
+    }
+};
+
+// --- Decoder selection ---
+function decoderSelect(type) {
+    state.decoder.type = type;
+    state.decoder.frames = [];
+    state.decoder.lastDecodeIdx = state.timestamps.length;
+    state.decoder.active = (type !== 'none');
+
+    const panel = document.getElementById('decoder-config');
+    const inner = document.getElementById('decoder-config-inner');
+    const results = document.getElementById('decoder-results');
+    const resultsInner = document.getElementById('decoder-results-inner');
+
+    document.getElementById('ib-decoder').querySelector('.highlight').textContent =
+        type === 'none' ? 'None' : DECODER_PIN_CONFIGS[type].label;
+
+    if (type === 'none') {
+        panel.classList.remove('active');
+        results.classList.remove('active');
+        return;
+    }
+
+    panel.classList.add('active');
+    results.classList.add('active');
+    resultsInner.innerHTML = '';
+
+    // Build config UI
+    const cfg = DECODER_PIN_CONFIGS[type];
+    let html = `<div class="decoder-config-hint">${cfg.label} — assign GPIO pins and configure options.</div>`;
+
+    // Pin assignments
+    for (const p of cfg.pins) {
+        const curVal = state.decoder.pins[p.id] >= 0 ? state.decoder.pins[p.id] : p.default;
+        html += `<div class="decoder-pin-row">
+            <label>${p.label}</label>
+            <select id="dec-pin-${p.id}" onchange="decoderSetPin('${p.id}', parseInt(this.value))">
+                ${ALL_PINS.map(gp => `<option value="${gp}" ${gp === curVal ? 'selected' : ''}>GPIO${gp}</option>`).join('')}
+            </select>
+        </div>`;
+        state.decoder.pins[p.id] = curVal;
+    }
+
+    // Options
+    for (const o of cfg.opts) {
+        const curVal = state.decoder.config[o.id] !== undefined ? state.decoder.config[o.id] : o.default;
+        const strVal = String(curVal);
+        if (o.type === 'select') {
+            html += `<div class="decoder-opt-row">
+                <label>${o.label}</label>
+                <select id="dec-opt-${o.id}" onchange="decoderSetOpt('${o.id}', this.value)">
+                    ${o.options.map(opt => `<option value="${opt}" ${opt === strVal ? 'selected' : ''}>${opt}</option>`).join('')}
+                </select>
+            </div>`;
+        }
+    }
+
+    inner.innerHTML = html;
+    runDecoder();
+}
+
+function decoderSetPin(id, gpio) {
+    state.decoder.pins[id] = gpio;
+    state.decoder.frames = [];
+    state.decoder.lastDecodeIdx = 0;
+    document.getElementById('decoder-results-inner').innerHTML = '';
+    runDecoder();
+}
+
+function decoderSetOpt(id, val) {
+    // Parse numeric values
+    if (id === 'baud' || id === 'dataBits' || id === 'stopBits') {
+        state.decoder.config[id] = parseFloat(val);
+    } else if (id === 'cpol' || id === 'cpha') {
+        state.decoder.config[id] = parseInt(val.charAt(0));
+    } else {
+        state.decoder.config[id] = val;
+    }
+    state.decoder.frames = [];
+    state.decoder.lastDecodeIdx = 0;
+    document.getElementById('decoder-results-inner').innerHTML = '';
+    runDecoder();
+}
+
+function clearDecoderResults() {
+    state.decoder.frames = [];
+    document.getElementById('decoder-results-inner').innerHTML = '';
+}
+
+// --- Helper: extract GPIO bit from state bitfield ---
+function gpioBit(states, idx, pin) {
+    return (states[idx] >> pin) & 1;
+}
+
+// ============================================================
+// I²C DECODER
+// ============================================================
+function decodeI2C(timestamps, states, timeUs, tMin, tMax) {
+    const sclPin = state.decoder.pins.scl;
+    const sdaPin = state.decoder.pins.sda;
+    if (sclPin < 0 || sdaPin < 0) return;
+
+    // Find index range to decode (only new data + some overlap for edge detection)
+    const overlap = 10;
+    const startIdx = Math.max(0, state.decoder.lastDecodeIdx - overlap);
+    const endIdx = states.length;
+    if (endIdx - startIdx < 5) return;
+
+    // Determine visible time range for annotations
+    const annotStartIdx = Math.max(0, startIdx);
+
+    let i = startIdx;
+    let wasScl = gpioBit(states, Math.max(0,i-1), sclPin);
+    let wasSda = gpioBit(states, Math.max(0,i-1), sdaPin);
+
+    // State machine
+    let inTransaction = false;
+    let bitCount = 0;
+    let byteVal = 0;
+    let isAddress = false;
+    let frameStartTime = 0;
+    let firstBitTime = 0;
+
+    while (i < endIdx) {
+        const scl = gpioBit(states, i, sclPin);
+        const sda = gpioBit(states, i, sdaPin);
+
+        // Detect START: SDA falls while SCL is high
+        if (wasScl && wasSda && !sda && scl && !inTransaction) {
+            inTransaction = true;
+            bitCount = 0;
+            byteVal = 0;
+            isAddress = true;
+            frameStartTime = timeUs[i];
+            state.decoder.frames.push({
+                type: 'i2c_start', timeUs: timeUs[i], durationUs: 0,
+                text: 'START', style: 'i2c'
+            });
+        }
+
+        // Detect STOP: SDA rises while SCL is high
+        if (inTransaction && scl && wasScl && !wasSda && sda) {
+            inTransaction = false;
+            state.decoder.frames.push({
+                type: 'i2c_stop', timeUs: timeUs[i], durationUs: 0,
+                text: 'STOP', style: 'i2c'
+            });
+        }
+
+        // Sample data on rising edge of SCL
+        if (inTransaction && scl && !wasScl && i >= 1) {
+            if (bitCount < 8) {
+                // Data bits 0-7
+                if (bitCount === 0) firstBitTime = timeUs[i];
+                byteVal = (byteVal << 1) | sda;
+                bitCount++;
+            } else {
+                // bitCount === 8: 9th SCL edge = ACK bit
+                const ack = sda;
+                let dataStr = '';
+                if (isAddress) {
+                    const addr = (byteVal >> 1) & 0x7F;
+                    const rw = byteVal & 1;
+                    const rwStr = rw ? 'R' : 'W';
+                    dataStr = `Addr 0x${addr.toString(16).toUpperCase().padStart(2,'0')} (${rwStr})`;
+                    isAddress = false;
+                } else {
+                    dataStr = `0x${byteVal.toString(16).toUpperCase().padStart(2,'0')} (${byteVal})`;
+                }
+
+                state.decoder.frames.push({
+                    type: 'i2c_byte', timeUs: firstBitTime,
+                    durationUs: timeUs[i] - firstBitTime,
+                    data: { byte: byteVal, ack: !ack },
+                    text: `${ack ? '✗' : '✓'} ${dataStr}`,
+                    style: 'i2c',
+                    ack: !ack, byteVal: byteVal
+                });
+
+                bitCount = 0;
+                byteVal = 0;
+            }
+        }
+
+        wasScl = scl;
+        wasSda = sda;
+        i++;
+    }
+
+    state.decoder.lastDecodeIdx = endIdx;
+}
+
+// ============================================================
+// UART DECODER
+// ============================================================
+function decodeUART(timestamps, states, timeUs, tMin, tMax) {
+    const rxPin = state.decoder.pins.rx;
+    if (rxPin < 0) return;
+
+    const baud = state.decoder.config.baud;
+    const dataBits = state.decoder.config.dataBits;
+    const parity = state.decoder.config.parity;
+    const stopBits = state.decoder.config.stopBits;
+    const bitUs = 1000000 / baud;
+
+    const overlap = Math.ceil(20 * bitUs / 10); // enough for ~20 bits
+    const startIdx = Math.max(0, state.decoder.lastDecodeIdx - overlap);
+    const endIdx = states.length;
+    if (endIdx - startIdx < 5) return;
+
+    let i = startIdx;
+    let prevBit = gpioBit(states, Math.max(0,i-1), rxPin);
+
+    while (i < endIdx - 1) {
+        const bit = gpioBit(states, i, rxPin);
+
+        // Detect start bit: falling edge from idle (high) to low
+        if (prevBit === 1 && bit === 0) {
+            const startUs = timeUs[i];
+            let sampleIdx = i;
+
+            // Wait half a bit period and start sampling
+            const halfBitNs = bitUs * 1000 / 2;
+            while (sampleIdx < endIdx && (timestamps[sampleIdx] - timestamps[i]) < halfBitNs) {
+                sampleIdx++;
+            }
+
+            if (sampleIdx >= endIdx) break;
+
+            // Sample data bits
+            let byteVal = 0;
+            let valid = true;
+            let frameBits = [];
+
+            for (let b = 0; b < dataBits; b++) {
+                const targetNs = (b + 1) * bitUs * 1000;
+                while (sampleIdx < endIdx && (timestamps[sampleIdx] - timestamps[i]) < targetNs) {
+                    sampleIdx++;
+                }
+                if (sampleIdx >= endIdx) { valid = false; break; }
+                const sampleBit = gpioBit(states, sampleIdx, rxPin);
+                byteVal = (byteVal >> 1) | (sampleBit << (dataBits - 1));
+                frameBits.push(sampleBit);
+            }
+
+            if (!valid) break;
+
+            // Sample parity bit
+            let parityOk = true;
+            if (parity !== 'none') {
+                const targetNs = (dataBits + 1) * bitUs * 1000;
+                while (sampleIdx < endIdx && (timestamps[sampleIdx] - timestamps[i]) < targetNs) {
+                    sampleIdx++;
+                }
+                if (sampleIdx < endIdx) {
+                    const parityBit = gpioBit(states, sampleIdx, rxPin);
+                    const ones = byteVal.toString(2).split('1').length - 1;
+                    const expectedParity = (parity === 'even') ? (ones % 2 === 0 ? 0 : 1) : (ones % 2 === 0 ? 1 : 0);
+                    parityOk = (parityBit === expectedParity);
+                }
+            }
+
+            // Sample stop bit
+            const stopTargetNs = (dataBits + 1 + (parity !== 'none' ? 1 : 0) + stopBits) * bitUs * 1000;
+            while (sampleIdx < endIdx && (timestamps[sampleIdx] - timestamps[i]) < stopTargetNs) {
+                sampleIdx++;
+            }
+            let stopOk = false;
+            if (sampleIdx < endIdx) {
+                stopOk = gpioBit(states, sampleIdx, rxPin) === 1;
+            }
+
+            let text = `0x${byteVal.toString(16).toUpperCase().padStart(2,'0')} (${byteVal})`;
+            if (!parityOk) text += ' ⚠ parity';
+            if (!stopOk) text += ' ⚠ stop';
+            if (byteVal >= 32 && byteVal <= 126) text += ` '${String.fromCharCode(byteVal)}'`;
+
+            state.decoder.frames.push({
+                type: 'uart_byte', timeUs: startUs,
+                durationUs: timeUs[sampleIdx] - startUs,
+                data: { byte: byteVal, parityOk, stopOk, baud },
+                text: text,
+                style: 'uart',
+                byteVal: byteVal
+            });
+
+            // Skip ahead past this byte
+            while (i < endIdx && (timestamps[i] - timestamps[sampleIdx]) < bitUs * 2000) {
+                i++;
+            }
+            prevBit = gpioBit(states, Math.min(i, endIdx-1), rxPin);
+            continue;
+        }
+
+        prevBit = bit;
+        i++;
+    }
+
+    state.decoder.lastDecodeIdx = endIdx;
+}
+
+// ============================================================
+// SPI DECODER
+// ============================================================
+function decodeSPI(timestamps, states, timeUs, tMin, tMax) {
+    const sclkPin = state.decoder.pins.sclk;
+    const mosiPin = state.decoder.pins.mosi;
+    const misoPin = state.decoder.pins.miso;
+    const csPin   = state.decoder.pins.cs;
+    if (sclkPin < 0 || csPin < 0) return;
+
+    const cpol = state.decoder.config.cpol;  // clock polarity
+    const cpha = state.decoder.config.cpha;  // clock phase
+    const bitOrder = state.decoder.config.bitOrder;
+    const mosiEnable = mosiPin >= 0;
+    const misoEnable = misoPin >= 0;
+
+    const overlap = 20;
+    const startIdx = Math.max(0, state.decoder.lastDecodeIdx - overlap);
+    const endIdx = states.length;
+    if (endIdx - startIdx < 5) return;
+
+    let i = startIdx;
+    let wasCs = gpioBit(states, Math.max(0,i-1), csPin);
+    let wasSclk = gpioBit(states, Math.max(0,i-1), sclkPin);
+    let inTransaction = false;
+    let bitCount = 0;
+    let mosiByte = 0;
+    let misoByte = 0;
+    let frameStart = 0;
+
+    // Determine which clock edge captures data
+    // CPHA=0: sample on first edge (rising if CPOL=0, falling if CPOL=1)
+    // CPHA=1: sample on second edge
+    const captureRising = (cpol === 0 && cpha === 0) || (cpol === 1 && cpha === 1);
+
+    while (i < endIdx) {
+        const cs = gpioBit(states, i, csPin);
+        const sclk = gpioBit(states, i, sclkPin);
+
+        // CS active (low) — transaction start
+        if (cs === 0 && wasCs === 1 && !inTransaction) {
+            inTransaction = true;
+            bitCount = 0;
+            mosiByte = 0;
+            misoByte = 0;
+            frameStart = timeUs[i];
+            state.decoder.frames.push({
+                type: 'spi_start', timeUs: timeUs[i], durationUs: 0,
+                text: 'CS↓', style: 'spi'
+            });
+        }
+
+        // CS inactive (high) — transaction end
+        if (cs === 1 && wasCs === 0 && inTransaction) {
+            inTransaction = false;
+            if (bitCount > 0) {
+                // Flush partial byte
+                state.decoder.frames.push({
+                    type: 'spi_byte', timeUs: frameStart,
+                    durationUs: timeUs[i] - frameStart,
+                    data: { mosi: mosiByte, miso: misoByte, bits: bitCount },
+                    text: `MOSI:0x${mosiByte.toString(16).toUpperCase().padStart(2,'0')}` +
+                          (misoEnable ? ` MISO:0x${misoByte.toString(16).toUpperCase().padStart(2,'0')}` : ''),
+                    style: 'spi',
+                    byteVal: mosiByte
+                });
+            }
+            state.decoder.frames.push({
+                type: 'spi_stop', timeUs: timeUs[i], durationUs: 0,
+                text: 'CS↑', style: 'spi'
+            });
+        }
+
+        // Sample data on clock edge
+        if (inTransaction) {
+            const risingEdge = sclk === 1 && wasSclk === 0;
+            const fallingEdge = sclk === 0 && wasSclk === 1;
+            const captureEdge = captureRising ? risingEdge : fallingEdge;
+
+            if (captureEdge) {
+                if (mosiEnable) {
+                    const mosiBit = gpioBit(states, i, mosiPin);
+                    if (bitOrder === 'msb') {
+                        mosiByte = (mosiByte << 1) | mosiBit;
+                    } else {
+                        mosiByte = mosiByte | (mosiBit << bitCount);
+                    }
+                }
+                if (misoEnable && misoPin >= 0) {
+                    const misoBit = gpioBit(states, i, misoPin);
+                    if (bitOrder === 'msb') {
+                        misoByte = (misoByte << 1) | misoBit;
+                    } else {
+                        misoByte = misoByte | (misoBit << bitCount);
+                    }
+                }
+                bitCount++;
+
+                if (bitCount === 8) {
+                    state.decoder.frames.push({
+                        type: 'spi_byte', timeUs: frameStart,
+                        durationUs: timeUs[i] - frameStart,
+                        data: { mosi: mosiByte, miso: misoByte, bits: 8 },
+                        text: `MOSI:0x${mosiByte.toString(16).toUpperCase().padStart(2,'0')}` +
+                              (misoEnable ? ` MISO:0x${misoByte.toString(16).toUpperCase().padStart(2,'0')}` : ''),
+                        style: 'spi',
+                        byteVal: mosiByte
+                    });
+                    bitCount = 0;
+                    mosiByte = 0;
+                    misoByte = 0;
+                }
+            }
+        }
+
+        wasCs = cs;
+        wasSclk = sclk;
+        i++;
+    }
+
+    state.decoder.lastDecodeIdx = endIdx;
+}
+
+// ============================================================
+// RUN DECODER
+// ============================================================
+function runDecoder() {
+    if (!state.decoder.active) return;
+    if (state.timestamps.length < 5) return;
+
+    const type = state.decoder.type;
+    const timeUs = state.timeUsCache;
+
+    const totalTime = state.timebaseUs * 10;
+    const visibleTime = totalTime / state.zoomLevel;
+    const tMin = -state.currentPanX;
+    const tMax = tMin + visibleTime;
+
+    // Extend decode window a bit beyond visible
+    const extTMin = tMin - visibleTime * 0.5;
+    const extTMax = tMax + visibleTime * 0.5;
+
+    switch (type) {
+        case 'i2c':
+            decodeI2C(state.timestamps, state.states, timeUs, extTMin, extTMax);
+            break;
+        case 'uart':
+            decodeUART(state.timestamps, state.states, timeUs, extTMin, extTMax);
+            break;
+        case 'spi':
+            decodeSPI(state.timestamps, state.states, timeUs, extTMin, extTMax);
+            break;
+    }
+
+    updateDecoderResults();
+}
+
+// ============================================================
+// UPDATE DECODER RESULTS DISPLAY
+// ============================================================
+function updateDecoderResults() {
+    const inner = document.getElementById('decoder-results-inner');
+    if (!inner) return;
+
+    // Only show most recent frames (limit display)
+    const frames = state.decoder.frames;
+    const maxShow = 200;
+    const show = frames.length > maxShow ? frames.slice(-maxShow) : frames;
+
+    // Only update if we have new frames
+    if (show.length === 0) {
+        inner.innerHTML = '<div class="dr-line" style="color:#3a3a6a;">Waiting for data...</div>';
+        return;
+    }
+
+    let html = '';
+    for (const f of show) {
+        const timeStr = f.timeUs.toFixed(1);
+        let cls = `dr-label-${f.style}`;
+        if (f.type === 'i2c_byte' || f.type === 'uart_byte' || f.type === 'spi_byte') {
+            html += `<div class="dr-line"><span class="dr-time">${timeStr}µs</span> ` +
+                    `<span class="${cls}">${f.text}</span></div>`;
+        } else {
+            html += `<div class="dr-line"><span class="dr-time">${timeStr}µs</span> ` +
+                    `<span class="${cls}">${f.text}</span></div>`;
+        }
+    }
+
+    // If we truncated, show count
+    if (frames.length > maxShow) {
+        html += `<div class="dr-line" style="color:#3a3a6a;">... ${frames.length - maxShow} more frames</div>`;
+    }
+
+    inner.innerHTML = html;
+    inner.scrollTop = inner.scrollHeight;
+}
+
+// ============================================================
+// CANVAS DECODER ANNOTATIONS (drawn in the render loop)
+// ============================================================
+function drawDecoderAnnotations(ctx, W, H, chH, marginL, marginR, marginTop, tMin, tMax, visibleTime, plotW) {
+    if (!state.decoder.active || state.decoder.frames.length === 0) return;
+
+    const frames = state.decoder.frames;
+    const timeUs = state.timeUsCache;
+    const labelColors = { i2c: '#4ECDC4', uart: '#FFEAA7', spi: '#BB8FCE' };
+
+    for (const f of frames) {
+        const t = f.timeUs;
+        if (t < tMin || t > tMax) continue;
+
+        const x = marginL + ((t - tMin) / visibleTime) * plotW;
+        if (x < marginL || x > W - marginR) continue;
+
+        const color = labelColors[f.style] || '#FFFFFF';
+
+        if (f.type === 'i2c_start' || f.type === 'spi_start') {
+            // Green upward arrow
+            ctx.fillStyle = '#4ECDC4';
+            ctx.beginPath();
+            ctx.moveTo(x, marginTop - 2);
+            ctx.lineTo(x - 4, marginTop - 9);
+            ctx.lineTo(x + 4, marginTop - 9);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#4ECDC4';
+            ctx.font = '7px system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('S', x, marginTop - 11);
+        } else if (f.type === 'i2c_stop' || f.type === 'spi_stop') {
+            // Red downward marker
+            ctx.fillStyle = '#FF6B6B';
+            ctx.beginPath();
+            ctx.moveTo(x, marginTop - 2);
+            ctx.lineTo(x - 4, marginTop - 9);
+            ctx.lineTo(x + 4, marginTop - 9);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#FF6B6B';
+            ctx.font = '7px system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('P', x, marginTop - 11);
+        } else if (f.type === 'i2c_byte' || f.type === 'uart_byte' || f.type === 'spi_byte') {
+            // Draw a bracket/annotation above the waveform
+            const midX = x;
+            const labelY = marginTop - 14;
+
+            ctx.fillStyle = color;
+            ctx.font = '8px system-ui, sans-serif';
+            ctx.textAlign = 'center';
+
+            let label = '';
+            if (f.data && f.type === 'i2c_byte') {
+                label = '0x' + (f.byteVal !== undefined ? f.byteVal.toString(16).toUpperCase().padStart(2,'0') : '??');
+            } else if (f.data && f.type === 'uart_byte') {
+                const b = f.byteVal;
+                label = '0x' + b.toString(16).toUpperCase().padStart(2,'0');
+                if (b >= 32 && b <= 126) label += "'" + String.fromCharCode(b) + "'";
+            } else if (f.data && f.type === 'spi_byte') {
+                label = '0x' + (f.byteVal !== undefined ? f.byteVal.toString(16).toUpperCase().padStart(2,'0') : '??');
+            } else {
+                label = f.text.substring(0, 12);
+            }
+
+            ctx.fillText(label, midX, labelY);
+
+            // Underline
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1;
+            ctx.globalAlpha = 0.5;
+            ctx.beginPath();
+            ctx.moveTo(midX - 12, labelY + 2);
+            ctx.lineTo(midX + 12, labelY + 2);
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+        }
+    }
+}
+
+// --- Cap decoder frames to prevent memory leak ---
+function capDecoderFrames() {
+    if (state.decoder.frames.length > 5000) {
+        state.decoder.frames.splice(0, state.decoder.frames.length - 4000);
+    }
+}
+
+// ============================================================
 // CHANNEL TOGGLE
 // ============================================================
 function toggleChannel(idx) {
@@ -1132,9 +1916,8 @@ function toggleChannel(idx) {
 // AUTO-CONNECT (try to detect server)
 // ============================================================
 function autoConnect() {
-    // Try connecting to the current host
     const host = window.location.hostname;
-    const port = window.location.port || '8080';
+    const port = '8080';
     const url = `ws://${host}:${port}`;
     document.getElementById('ws-url').value = url;
     connect();
