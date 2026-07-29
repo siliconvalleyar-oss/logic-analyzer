@@ -109,7 +109,7 @@ std::string ws_encode_pong(const std::string& payload) {
 
 std::string ws_compute_accept_key(const std::string& client_key) {
     std::string concat = client_key + WS_MAGIC;
-    SHA1 sha;
+    Sha1 sha;
     sha.update((const uint8_t*)concat.data(), concat.size());
     uint8_t digest[20];
     sha.final(digest);
