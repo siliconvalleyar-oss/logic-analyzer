@@ -610,7 +610,8 @@ private:
                 std::string sj = "{\"type\":\"state\",\"mode\":\"run\",\"rate\":" +
                     std::to_string(sample_rate_) + ",\"pins\":[";
                 for (int i=0;i<MAX_GPIO_PINS;i++) {
-                    if(i>0)sj+=","; sj+=std::to_string(ALL_GPIO_PINS[i]);
+                    if (i>0) sj+=",";
+                    sj+=std::to_string(ALL_GPIO_PINS[i]);
                 }
                 sj += "],\"samples\":" + std::to_string(BUFFER_SIZE) + "}";
                 c.write_buf += ws_encode_text(sj);
