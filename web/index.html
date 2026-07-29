@@ -385,7 +385,7 @@ html, body {
     <button class="run active"    onclick="setMode('run')">▶ RUN</button>
     <button class="stop"          onclick="setMode('stop')">■ STOP</button>
     <button class="single"        onclick="setMode('single')">⚡ SINGLE</button>
-    <span id="pause-badge">⏸ PAUSED</span>
+    <span id="pause-badge"><span id="pause-icon">⏸</span> PAUSED · <span id="pause-samples">0</span> samples</span>
 
     <div class="toolbar-sep"></div>
 
@@ -519,6 +519,9 @@ const state = {
     triggerPin:     -1,
     triggerType:    'rising',
     triggerIndex:   -1,
+
+    // Paused counter
+    pausedSamples:  0,
 
     // Cursors
     cursorA:        null,  // {x,y} or null
@@ -867,9 +870,11 @@ function setMode(mode) {
     else if (mode === 'stop') document.querySelector('#toolbar button.stop').classList.add('active');
     else if (mode === 'single') document.querySelector('#toolbar button.single').classList.add('active');
 
-    // Mostrar/ocultar badge PAUSED
+    // Mostrar/ocultar badge PAUSED con contador de muestras
     const pauseBadge = document.getElementById('pause-badge');
     if (mode === 'stop') {
+        state.pausedSamples = state.timestamps.length;
+        document.getElementById('pause-samples').textContent = state.pausedSamples;
         pauseBadge.classList.add('show');
     } else {
         pauseBadge.classList.remove('show');
