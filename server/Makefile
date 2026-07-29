@@ -1,23 +1,29 @@
 # Logic Analyzer Server - Makefile
 # Organizado por capas: core/, hardware/, net/, analysis/
+# Los objetos compilados (.o) y dependencias (.d) se alojan en obj/
 # Licencia: MIT
 
 CXX      := g++
 CXXFLAGS := -std=c++17 -O3 -Wall -Wextra -pthread -I. -Wno-deprecated-declarations
 LDFLAGS  := -lpthread -lcrypto
 
-# Source files by layer
+OBJ_DIR  := obj
+
+# Source files by layer (ruta relativa a este Makefile)
 SRCS := main.cpp \
         core/server.cpp core/config.cpp core/logger.cpp core/protocol.cpp \
         hardware/gpio.cpp hardware/ring_buffer.cpp \
         net/websocket.cpp net/sha1.cpp \
         analysis/trigger.cpp
 
-OBJS := $(SRCS:.cpp=.o)
+# Object files → obj/main.o obj/core/server.o obj/hardware/gpio.o …
+OBJS := $(addprefix $(OBJ_DIR)/, $(SRCS:.cpp=.o))
+# Dependency files generados automaticamente por -MMD -MP
+DEPS := $(OBJS:.o=.d)
 
 # Detect architecture (ARM = Raspberry Pi)
 UNAME_M := $(shell uname -m)
-IS_ARM := $(or $(findstring arm,$(UNAME_M)),$(findstring aarch64,$(UNAME_M)))
+IS_ARM  := $(or $(findstring arm,$(UNAME_M)),$(findstring aarch64,$(UNAME_M)))
 
 # On ARM, enable GPIO mmap and link libatomic (needed for 8-byte atomics on 32-bit)
 ifneq (,$(IS_ARM))
@@ -31,14 +37,21 @@ TARGET := logic_server
 
 all: $(TARGET)
 
+# Link: los OBJS ya incluyen prefijo obj/
 $(TARGET): $(OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 	@echo "=== Build complete: $(TARGET) ==="
 	@echo "Architecture: $(UNAME_M)"
 	@echo "GPIO mmap: $(if $(filter arm%,$(UNAME_M)),ENABLED,$(if $(filter aarch64,$(UNAME_M)),ENABLED,DISABLED (simulation)))"
 
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
+# Compilar .cpp → .o en obj/ manteniendo subdirectorios
+# -MMD -MP genera automaticamente los .d con dependencias de headers
+$(OBJ_DIR)/%.o: %.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -MMD -MP -c -o $@ $<
+
+# Incluir dependencias generadas (silenciosamente si no existen aun)
+-include $(wildcard $(DEPS))
 
 run: $(TARGET)
 	@echo "=== Starting Logic Analyzer Server on port 8080 ==="
@@ -64,19 +77,4 @@ docs:
 	fi
 
 clean:
-	rm -f $(OBJS) $(TARGET)
-	rm -rf core/*.o hardware/*.o net/*.o analysis/*.o
-
-# Dependencies
-core/config.o:      core/config.h
-core/logger.o:      core/logger.h
-core/protocol.o:    core/protocol.h hardware/ring_buffer.h analysis/trigger.h
-core/server.o:      core/server.h hardware/gpio.h hardware/ring_buffer.h \
-                    analysis/trigger.h core/config.h net/websocket.h \
-                    core/protocol.h core/version.h core/logger.h
-hardware/gpio.o:        hardware/gpio.h
-hardware/ring_buffer.o: hardware/ring_buffer.h
-net/websocket.o:    net/websocket.h net/sha1.h
-net/sha1.o:         net/sha1.h
-analysis/trigger.o: analysis/trigger.h hardware/ring_buffer.h
-main.o:             core/config.h core/server.h core/version.h core/logger.h
+	rm -rf $(OBJ_DIR) $(TARGET)

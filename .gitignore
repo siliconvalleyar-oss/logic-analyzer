@@ -16,10 +16,14 @@ scripts/*.local*
 # Compiled binaries
 # ============================================================
 server/logic_server
+server/obj/
 *.o
 *.obj
 *.exe
 *.out
+
+# Auto-generated dependency files
+*.d
 
 # ============================================================
 # WaveForms Live reference (third-party, not part of this project)
