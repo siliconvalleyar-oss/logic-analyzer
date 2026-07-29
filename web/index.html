@@ -656,7 +656,6 @@ function connect(url) {
         state.decoder.frames = [];
         state.decoder.lastDecodeIdx = 0;
         document.getElementById('decoder-results-inner').innerHTML = '';
-        document.getElementById('timebase').value = '10';  // reset timebase select
         // Auto reconnect after 3 seconds (with guard to prevent stacking)
         scheduleReconnect();
     };
