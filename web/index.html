@@ -377,13 +377,16 @@ html, body {
     <select id="timebase" onchange="setTimebase(this.value)">
         <option value="1">1 µs/div</option>
         <option value="5">5 µs/div</option>
-        <option value="10" selected>10 µs/div</option>
+        <option value="10">10 µs/div</option>
         <option value="50">50 µs/div</option>
         <option value="100">100 µs/div</option>
         <option value="500">500 µs/div</option>
         <option value="1000">1 ms/div</option>
         <option value="5000">5 ms/div</option>
         <option value="10000">10 ms/div</option>
+        <option value="50000">50 ms/div</option>
+        <option value="100000">100 ms/div</option>
+        <option value="500000" selected>500 ms/div</option>
     </select>
 
     <div class="toolbar-sep"></div>
@@ -641,7 +644,7 @@ function connect(url) {
             const msg = JSON.parse(ev.data);
             handleMessage(msg);
         } catch(e) {
-            // ignore
+            console.warn('WS msg error:', e.message);
         }
     };
 
@@ -722,10 +725,10 @@ function setStatus(status) {
 // ============================================================
 function handleMessage(msg) {
     if (msg.type === 'waveform') {
-        // Append new data
+        // Append new data (use concat for safe large-array handling)
         if (msg.timestamps && msg.states) {
-            state.timestamps.push(...msg.timestamps);
-            state.states.push(...msg.states);
+            state.timestamps = state.timestamps.concat(msg.timestamps);
+            state.states = state.states.concat(msg.states);
 
             // Trim to max samples
             if (state.timestamps.length > state.maxSamples) {

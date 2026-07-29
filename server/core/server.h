@@ -142,6 +142,10 @@ private:
     std::thread poll_thread_;
     std::thread broadcast_thread_;
 
+    // Control (run/stop/single)
+    std::atomic<bool> paused_{false};
+    std::atomic<bool> single_request_{false};
+
     // Trigger
     TriggerConfig trigger_;
 };

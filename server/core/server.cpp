@@ -156,12 +156,34 @@ void LogicServer::polling_loop() {
 
 void LogicServer::broadcast_loop() {
     std::string pj = pins_json();
+
     while (running_) {
         std::this_thread::sleep_for(
             std::chrono::milliseconds(SEND_INTERVAL_MS));
 
+        // Si hay solicitud de single-shot, la procesamos
+        bool single_mode = single_request_.exchange(false, std::memory_order_relaxed);
+
         auto samples = buffer_.drain();
-        if (samples.empty()) continue;
+        if (samples.empty()) {
+            if (single_mode) continue;  // esperar a que haya datos
+        }
+
+        // Si estamos pausados (y no es single-shot), descartamos sin enviar
+        if (paused_.load(std::memory_order_relaxed) && !single_mode) {
+            continue;
+        }
+
+        // Limit samples per WebSocket message to prevent browser issues
+        // with very large JSON payloads (~100KB for 3000+ samples).
+        // Browser crashes/WebSocket disconnects when receiving too many
+        // samples in a single frame. Limiting to 1024 keeps each frame
+        // under ~35KB which is safe for all browsers.
+        constexpr size_t MAX_SAMPLES_PER_BURST = 1024;
+        if (samples.size() > MAX_SAMPLES_PER_BURST) {
+            samples.erase(samples.begin(),
+                          samples.begin() + (samples.size() - MAX_SAMPLES_PER_BURST));
+        }
 
         int trig_idx = trigger_find_index(samples, trigger_);
         std::string json = proto_build_waveform(
@@ -175,6 +197,12 @@ void LogicServer::broadcast_loop() {
                 st.write_buf += frame;
                 if (was_empty) set_writable(fd);
             }
+        }
+
+        // Si era un single-shot, pausamos despues de enviar
+        if (single_mode) {
+            paused_.store(true, std::memory_order_relaxed);
+            LOG_INFO("Server", "Single-shot complete, paused");
         }
     }
 }
@@ -375,9 +403,15 @@ void LogicServer::handle_ws_frame(int fd, const WS_Frame& frame) {
             trigger_.type = TriggerConfig::from_string(type);
             LOG_INFO("Trigger", "GPIO%d %s", pin, type.c_str());
         } else if (cmd.find("\"run\"") != std::string::npos) {
-            LOG_DEBUG("Server", "Cmd: run");
+            LOG_INFO("Server", "Cmd: run — resuming");
+            paused_.store(false, std::memory_order_relaxed);
         } else if (cmd.find("\"stop\"") != std::string::npos) {
-            LOG_DEBUG("Server", "Cmd: stop");
+            LOG_INFO("Server", "Cmd: stop — pausing");
+            paused_.store(true, std::memory_order_relaxed);
+        } else if (cmd.find("\"single\"") != std::string::npos) {
+            LOG_INFO("Server", "Cmd: single — one-shot");
+            paused_.store(false, std::memory_order_relaxed);
+            single_request_.store(true, std::memory_order_relaxed);
         }
     }
 }
@@ -475,7 +509,10 @@ std::string LogicServer::get_html_page() {
     static std::string cached;
     if (!cached.empty()) return cached;
 
+    // Rutas absolutas primero (cuando se ejecuta via systemd),
+    // luego relativas (para desarrollo local).
     const char* paths[] = {
+        "/opt/logic-analyzer/server/web/index.html",
         "web/index.html", "../web/index.html", "./web/index.html"
     };
     for (auto p : paths) {
