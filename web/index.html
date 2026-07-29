@@ -374,7 +374,7 @@ html, body {
 <!-- ============================================================
      CONNECTION DIALOG
      ============================================================ -->
-<div id="connect-dialog">
+<div id="connect-dialog" class="hidden">
     <div class="card">
         <h2>🔬 Logic Analyzer</h2>
         <p>Connect to the C++ server running on your Raspberry Pi or local machine</p>
@@ -1923,8 +1923,8 @@ function autoConnect() {
     connect();
 }
 
-// Try auto-connect after a brief delay
-setTimeout(autoConnect, 500);
+// Auto-connect immediately (no passwords — local network)
+autoConnect();
 
 // ============================================================
 // START

@@ -60,7 +60,11 @@ bool LogicServer::start() {
 
     int opt = 1;
     setsockopt(server_fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-    setsockopt(server_fd_, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
+    // NOTA: SO_REUSEPORT deliberadamente NO usado.
+    // Permite que procesos zombies compitan por el mismo puerto,
+    // enviando handshakes WebSocket incorrectos al navegador.
+    // Sin REUSEPORT, si hay un zombie, el nuevo server falla al
+    // hacer bind() con un error claro en los logs.
 
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
@@ -308,12 +312,21 @@ void LogicServer::handle_http(int fd, ClientState& c,
         size_t kp = req.find("Sec-WebSocket-Key:");
         if (kp == std::string::npos)
             kp = req.find("sec-websocket-key:");
+        if (kp == std::string::npos)
+            kp = req.find("SEC-WEBSOCKET-KEY:");
         LOG_INFO("Server", "key pos=%zu", kp);
         if (kp != std::string::npos) {
             kp = req.find(':', kp) + 1;
             while (kp < req.size() && req[kp] == ' ') kp++;
+            // Buscar fin de linea: \r\n, \n, o \r
             size_t ke = req.find('\r', kp);
+            size_t ke2 = req.find('\n', kp);
+            if (ke == std::string::npos || (ke2 != std::string::npos && ke2 < ke)) ke = ke2;
+            if (ke == std::string::npos) ke = req.size();
             c.ws_key = req.substr(kp, ke - kp);
+            // Trim trailing whitespace
+            while (!c.ws_key.empty() && (c.ws_key.back() == ' ' || c.ws_key.back() == '\r' || c.ws_key.back() == '\n'))
+                c.ws_key.pop_back();
             LOG_INFO("Server", "ws_key=%s", c.ws_key.c_str());
         }
 

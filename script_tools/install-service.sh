@@ -138,7 +138,10 @@ do_install() {
     ok "Servicio habilitado (arranque automatico en boot)"
 
     if [[ "${start_service}" == "true" ]]; then
-        echo "Step 4: Iniciando servicio..."
+        echo "Step 4: Matando procesos anteriores..."
+        sudo killall -9 logic_server 2>/dev/null || true
+        sleep 1
+        echo "Step 5: Iniciando servicio..."
         if sudo systemctl start "${SERVICE_NAME}"; then
             ok "Servicio iniciado correctamente"
         else
