@@ -167,7 +167,9 @@ void LogicServer::broadcast_loop() {
         std::lock_guard<std::mutex> lk(clients_mutex_);
         for (auto& [fd, st] : clients_) {
             if (st.state == ClientState::WS_CONNECTED) {
+                bool was_empty = st.write_buf.empty();
                 st.write_buf += frame;
+                if (was_empty) set_writable(fd);
             }
         }
     }
@@ -181,19 +183,21 @@ bool LogicServer::main_loop() {
     struct epoll_event events[MAX_EVENTS];
     while (running_) {
         int n = epoll_wait(epoll_fd_, events, MAX_EVENTS, 100);
-        if (n < 0 && errno != EINTR) break;
+        if (n < 0) break;
 
         for (int i = 0; i < n; i++) {
             int fd = events[i].data.fd;
-            if (events[i].events & (EPOLLERR | EPOLLHUP)) {
+            uint32_t ev = events[i].events;
+            if (ev & (EPOLLERR | EPOLLHUP)) {
+                LOG_WARN("Server", "EPOLLERR/HUP fd=%d events=0x%x", fd, ev);
                 close_client(fd);
                 continue;
             }
             if (fd == server_fd_) {
                 accept_new_client();
             } else {
-                if (events[i].events & EPOLLIN)  handle_client_read(fd);
-                if (events[i].events & EPOLLOUT) handle_client_write(fd);
+                if (ev & EPOLLOUT) handle_client_write(fd);
+                if (ev & EPOLLIN)  handle_client_read(fd);
             }
         }
     }
@@ -215,7 +219,7 @@ void LogicServer::accept_new_client() {
     LOG_INFO("Server", "New connection: %s:%d fd=%d", ip, ntohs(ca.sin_port), fd);
 
     struct epoll_event ev;
-    ev.events  = EPOLLIN | EPOLLOUT;
+    ev.events  = EPOLLIN;
     ev.data.fd = fd;
     epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &ev);
 
@@ -230,13 +234,17 @@ void LogicServer::accept_new_client() {
 void LogicServer::handle_client_read(int fd) {
     std::lock_guard<std::mutex> lk(clients_mutex_);
     auto it = clients_.find(fd);
-    if (it == clients_.end()) return;
+    if (it == clients_.end()) {
+        LOG_WARN("Server", "handle_client_read fd=%d not found", fd);
+        return;
+    }
 
     auto& c = it->second;
     if (c.state == ClientState::CLOSED) return;
 
     char buf[8192];
     ssize_t n = read(fd, buf, sizeof(buf));
+    LOG_INFO("Server", "handle_client_read fd=%d n=%ld errno=%d", fd, (long)n, errno);
     if (n <= 0) {
         if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return;
         close_client_locked(fd, it);
@@ -245,8 +253,15 @@ void LogicServer::handle_client_read(int fd) {
 
     if (c.state == ClientState::HTTP_EXPECT) {
         c.read_buf.append(buf, n);
+        LOG_INFO("Server", "HTTP_EXPECT buf size=%zu, searching CRLFCRLF", c.read_buf.size());
         size_t he = c.read_buf.find("\r\n\r\n");
-        if (he != std::string::npos) handle_http(fd, c, it);
+        if (he != std::string::npos) {
+            LOG_INFO("Server", "Found CRLFCRLF, calling handle_http");
+            handle_http(fd, c, it);
+            LOG_INFO("Server", "handle_http returned, state=%d write_buf.size=%zu", (int)c.state, c.write_buf.size());
+        } else {
+            LOG_INFO("Server", "CRLFCRLF NOT found yet");
+        }
     } else if (c.state == ClientState::WS_CONNECTED) {
         c.frame_buf.insert(c.frame_buf.end(), buf, buf + n);
         size_t off = 0;
@@ -269,10 +284,12 @@ void LogicServer::handle_client_read(int fd) {
 
 void LogicServer::handle_http(int fd, ClientState& c,
                               std::map<int, ClientState>::iterator& it) {
+    LOG_INFO("Server", "handle_http ENTER method=? ws_up check");
     const std::string& req = c.read_buf;
     std::istringstream iss(req);
     std::string method, path, ver;
     iss >> method >> path >> ver;
+    LOG_INFO("Server", "handle_http method=%s path=%s", method.c_str(), path.c_str());
 
     if (method != "GET") {
         std::string r = "HTTP/1.1 405 Method Not Allowed\r\nContent-Length:0\r\n\r\n";
@@ -285,37 +302,43 @@ void LogicServer::handle_http(int fd, ClientState& c,
     bool ws_up = (req.find("Upgrade: websocket") != std::string::npos) ||
                  (req.find("upgrade: websocket")  != std::string::npos);
 
+    LOG_INFO("Server", "ws_up=%d", ws_up);
     if (ws_up) {
         // Extract Sec-WebSocket-Key
         size_t kp = req.find("Sec-WebSocket-Key:");
         if (kp == std::string::npos)
             kp = req.find("sec-websocket-key:");
+        LOG_INFO("Server", "key pos=%zu", kp);
         if (kp != std::string::npos) {
             kp = req.find(':', kp) + 1;
             while (kp < req.size() && req[kp] == ' ') kp++;
             size_t ke = req.find('\r', kp);
             c.ws_key = req.substr(kp, ke - kp);
+            LOG_INFO("Server", "ws_key=%s", c.ws_key.c_str());
         }
 
+        LOG_INFO("Server", "computing accept key...");
         std::string accept = ws_compute_accept_key(c.ws_key);
+        LOG_INFO("Server", "accept=%s", accept.c_str());
         std::string resp =
             "HTTP/1.1 101 Switching Protocols\r\n"
             "Upgrade: websocket\r\nConnection: Upgrade\r\n"
             "Sec-WebSocket-Accept: " + accept + "\r\n\r\n";
-        if (write(fd, resp.data(), resp.size()) < 0) { /* client gone */ }
-
+        LOG_INFO("Server", "queuing 101 response...");
+        c.write_buf += resp;
+        c.write_buf += ws_encode_text(proto_build_state(
+            config_.sample_rate_hz, pins_json(), config_.buffer_size));
         c.state = ClientState::WS_CONNECTED;
         c.read_buf.clear();
-
-        // Send init state
-        std::string state_msg = proto_build_state(
-            config_.sample_rate_hz, pins_json(), config_.buffer_size);
-        c.write_buf += ws_encode_text(state_msg);
+        set_writable(fd);
+        LOG_INFO("Server", "101 queued, state queued, ws connected");
 
         LOG_INFO("Server", "Client %d upgraded to WebSocket", fd);
     } else {
+        c.write_buf = "";
         serve_html(fd);
-        close_client_locked(fd, it);
+        c.state = ClientState::HTTP_DONE;
+        set_writable(fd);
     }
 }
 
@@ -350,17 +373,43 @@ void LogicServer::handle_ws_frame(int fd, const WS_Frame& frame) {
 // Client write
 //------------------------------------------------------------------------------
 
+void LogicServer::set_writable(int fd) {
+    struct epoll_event ev;
+    ev.events  = EPOLLIN | EPOLLOUT;
+    ev.data.fd = fd;
+    epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev);
+}
+
+void LogicServer::clear_writable(int fd) {
+    struct epoll_event ev;
+    ev.events  = EPOLLIN;
+    ev.data.fd = fd;
+    epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev);
+}
+
 void LogicServer::handle_client_write(int fd) {
     std::lock_guard<std::mutex> lk(clients_mutex_);
     auto it = clients_.find(fd);
     if (it == clients_.end()) return;
 
     auto& c = it->second;
-    if (c.write_buf.empty()) return;
+    if (c.write_buf.empty()) {
+        clear_writable(fd);
+        return;
+    }
 
     ssize_t n = write(fd, c.write_buf.data(), c.write_buf.size());
+    LOG_INFO("Server", "handle_client_write fd=%d n=%ld buf.size=%zu state=%d",
+             fd, (long)n, c.write_buf.size(), (int)c.state);
     if (n > 0) {
         c.write_buf.erase(0, n);
+        if (c.write_buf.empty()) {
+            clear_writable(fd);
+            if (c.state == ClientState::HTTP_DONE) {
+                LOG_INFO("Server", "HTTP_DONE closing client %d", fd);
+                close_client_locked(fd, it);
+            }
+        }
     } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
         close_client_locked(fd, it);
     }
@@ -371,18 +420,20 @@ void LogicServer::handle_client_write(int fd) {
 //------------------------------------------------------------------------------
 
 void LogicServer::serve_html(int fd) {
+    auto it = clients_.find(fd);
+    if (it == clients_.end()) return;
+    auto& c = it->second;
     std::string html = get_html_page();
     char lb[32];
     snprintf(lb, sizeof(lb), "%zu", html.size());
 
-    std::string resp =
+    c.write_buf +=
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/html; charset=utf-8\r\n"
         "Content-Length: " + std::string(lb) + "\r\n"
         "Cache-Control: no-cache, no-store, must-revalidate\r\n"
         "Connection: close\r\n"
         "Access-Control-Allow-Origin: *\r\n\r\n" + html;
-    if (write(fd, resp.data(), resp.size()) < 0) { /* client gone */ }
 }
 
 //------------------------------------------------------------------------------

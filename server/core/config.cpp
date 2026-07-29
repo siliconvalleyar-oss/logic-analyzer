@@ -18,6 +18,8 @@ ServerConfig config_parse_args(int argc, char* argv[]) {
 
         if (arg == "-p" || arg == "--port") {
             if (i + 1 < argc) cfg.http_port = atoi(argv[++i]);
+        } else if (arg[0] != '-' && argc > 1 && i == 1) {
+            cfg.http_port = atoi(argv[i]);
         } else if (arg == "-r" || arg == "--rate") {
             if (i + 1 < argc) cfg.sample_rate_hz = atoi(argv[++i]);
         } else if (arg == "-c" || arg == "--config") {
@@ -82,8 +84,9 @@ ServerConfig config_load_file(const std::string& filepath) {
 
 void config_print_help(const char* name) {
     std::cout << "Logic Analyzer Server - Usage:\n"
-              << "  " << name << " [options]\n\n"
+              << "  " << name << " [port] [options]\n\n"
               << "Options:\n"
+              << "  port                   HTTP port (default: 8080)\n"
               << "  -p, --port <port>     HTTP port (default: 8080)\n"
               << "  -c, --config <file>   Config file (default: config.json)\n"
               << "  -r, --rate <hz>       Sample rate (default: 500000)\n"

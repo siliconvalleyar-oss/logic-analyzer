@@ -79,7 +79,7 @@ public:
 private:
     // Estado por cliente
     struct ClientState {
-        enum State { HTTP_EXPECT, WS_CONNECTED, CLOSED };
+        enum State { HTTP_EXPECT, WS_CONNECTED, HTTP_DONE, CLOSED };
         State       state = HTTP_EXPECT;
         std::string read_buf;
         std::string write_buf;
@@ -100,6 +100,8 @@ private:
                      std::map<int, ClientState>::iterator& it);
     void handle_ws_frame(int fd, const WS_Frame& frame);
     void serve_html(int fd);
+    void set_writable(int fd);
+    void clear_writable(int fd);
     void close_client(int fd);
     void close_client_locked(int fd,
                              std::map<int, ClientState>::iterator& it);

@@ -34,7 +34,8 @@ void SHA1::final(uint8_t digest[20]) {
     uint64_t bits = count * 8;
     uint8_t pad = 0x80;
     update(&pad, 1);
-    while ((count & 63) != 56) update(&pad, 0);
+    uint8_t zero = 0;
+    while ((count & 63) != 56) update(&zero, 1);
     for (int i = 0; i < 8; i++) update(&((uint8_t*)&bits)[7 - i], 1);
     for (int i = 0; i < 5; i++) {
         digest[i*4+0] = (uint8_t)(state[i] >> 24);
