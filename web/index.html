@@ -962,16 +962,25 @@ function handleMessage(msg) {
         }
         // Append new data (use concat for safe large-array handling)
         if (msg.timestamps && msg.states) {
+            const preLen = state.timestamps.length;
             state.timestamps = state.timestamps.concat(msg.timestamps);
             state.states = state.states.concat(msg.states);
 
-            // Trim to max samples
+            // Set trigger from this batch BEFORE trim (con offset por preLen)
+            // NOTA: msg.trigger_index es relativo al batch entrante, NO al buffer acumulado.
+            // Solo actualizamos cuando el servidor reporta trigger (>=0).
+            // Si el batch no tiene trigger (-1), conservamos el triggerIndex anterior.
+            if (msg.trigger_index !== undefined && msg.trigger_index >= 0) {
+                state.triggerIndex = preLen + msg.trigger_index;
+            }
+
+            // Trim to max samples — el ajuste de excess se aplica automáticamente
+            // tanto al triggerIndex viejo como al nuevo que acabamos de asignar.
             if (state.timestamps.length > state.maxSamples) {
                 const excess = state.timestamps.length - state.maxSamples;
                 state.timestamps.splice(0, excess);
                 state.states.splice(0, excess);
 
-                // Adjust trigger index to account for trimmed samples
                 if (state.triggerIndex >= 0) {
                     state.triggerIndex -= excess;
                     if (state.triggerIndex < 0 || state.triggerIndex >= state.timestamps.length) {
@@ -983,11 +992,6 @@ function handleMessage(msg) {
             // Rebuild cached timeUs array (avoid allocation per frame)
             state.firstTsCache = state.timestamps[0] || 0;
             state.timeUsCache = state.timestamps.map(t => (t - state.firstTsCache) / 1000);
-
-            // Update trigger index from server
-            if (msg.trigger_index !== undefined) {
-                state.triggerIndex = (msg.trigger_index >= 0) ? msg.trigger_index : -1;
-            }
 
             // Update rate if provided
             if (msg.rate) state.sampleRate = msg.rate;
