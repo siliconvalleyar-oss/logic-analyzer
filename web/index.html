@@ -421,6 +421,74 @@ html, body {
 }
 
 /* ============================================================
+   KEYBOARD HELP OVERLAY
+   ============================================================ */
+#help-overlay {
+    display:none;
+    position:fixed; top:0; left:0; right:0; bottom:0;
+    z-index:999;
+    background:rgba(0,0,0,0.6);
+    backdrop-filter:blur(4px);
+    align-items:center; justify-content:center;
+}
+#help-overlay.show { display:flex; }
+#help-overlay .help-card {
+    background:linear-gradient(160deg, #1a1a35, #12122a);
+    border:1px solid #2a2a4a;
+    border-radius:16px;
+    padding:28px 32px;
+    min-width:320px;
+    max-width:420px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5);
+}
+#help-overlay .help-card h2 {
+    font-size:16px; font-weight:700; color:#4ECDC4;
+    margin-bottom:20px;
+    letter-spacing:0.5px;
+}
+#help-overlay .help-card .help-close {
+    float:right;
+    background:none; border:none;
+    color:#6b7a8a; font-size:18px;
+    cursor:pointer; padding:0 4px;
+    line-height:1; transition:color 0.2s;
+}
+#help-overlay .help-card .help-close:hover { color:#c8d6e5; }
+.help-grid {
+    display:grid;
+    grid-template-columns:auto 1fr;
+    gap:4px 12px;
+    align-items:center;
+}
+.help-grid .help-key {
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:28px; height:22px;
+    padding:0 8px;
+    border-radius:4px;
+    font-size:12px; font-weight:700; font-family:inherit;
+    background:rgba(255,255,255,0.08);
+    color:#c8d6e5;
+    border:1px solid rgba(255,255,255,0.1);
+}
+.help-grid .help-desc {
+    font-size:13px; color:#8a9ab5;
+    padding:6px 0;
+}
+.help-grid .help-desc .hl {
+    color:#c8d6e5; font-weight:500;
+}
+.help-grid .help-sep {
+    grid-column:1/-1;
+    border-bottom:1px solid rgba(255,255,255,0.05);
+    margin:2px 0;
+}
+.help-footer {
+    margin-top:16px;
+    font-size:11px; color:#3a3a6a;
+    text-align:center;
+}
+
+/* ============================================================
    RESPONSIVE
    ============================================================ */
 @media (max-width:768px) {
@@ -547,6 +615,26 @@ html, body {
             <span id="ib-decoder" style="margin-left:auto;">Decoder: <span class="highlight">None</span></span>
         </div>
         <div id="decoder-annotations"></div>
+    <div id="help-overlay" onclick="closeHelp()">
+        <div class="help-card" onclick="event.stopPropagation()">
+            <button class="help-close" onclick="closeHelp()">✕</button>
+            <h2>⌨ Keyboard Shortcuts</h2>
+            <div class="help-grid">
+                <span class="help-key">R</span><span class="help-desc"><span class="hl">Run</span> — resume capture</span>
+                <span class="help-key">S</span><span class="help-desc"><span class="hl">Stop</span> — pause capture</span>
+                <span class="help-key">N</span><span class="help-desc"><span class="hl">Single</span> — one-shot capture</span>
+                <span class="help-sep"></span>
+                <span class="help-key">C</span><span class="help-desc"><span class="hl">Cursors</span> — toggle measurement cursors</span>
+                <span class="help-key">E</span><span class="help-desc"><span class="hl">Export</span> — download CSV</span>
+                <span class="help-key">F</span><span class="help-desc"><span class="hl">Fit</span> — reset zoom to fit screen</span>
+                <span class="help-sep"></span>
+                <span class="help-key">T</span><span class="help-desc"><span class="hl">Trigger</span> — focus trigger pin select / toggle decoder panel</span>
+                <span class="help-sep"></span>
+                <span class="help-key">?</span><span class="help-desc"><span class="hl">Help</span> — show this overlay</span>
+            </div>
+            <div class="help-footer">Click outside or press <kbd>?</kbd> / <kbd>Esc</kbd> to close</div>
+        </div>
+    </div>
     </div>
     <div id="decoder-config">
         <h3>Protocol Decoder</h3>
@@ -1362,6 +1450,15 @@ function handleKeyDown(e) {
             resetZoom();
             flashKeyHint('fit');
             break;
+        case '?':
+        case '/':
+            e.preventDefault();
+            toggleHelp();
+            flashKeyHint('help');
+            break;
+        case 'escape':
+            closeHelp();
+            break;
         case 't':
             e.preventDefault();
             if (state.decoder.active) {
@@ -1390,6 +1487,19 @@ function handleKeyDown(e) {
             }
             break;
     }
+}
+
+// ============================================================
+// HELP OVERLAY
+// ============================================================
+function toggleHelp() {
+    const el = document.getElementById('help-overlay');
+    if (!el) return;
+    el.classList.toggle('show');
+}
+function closeHelp() {
+    const el = document.getElementById('help-overlay');
+    if (el) el.classList.remove('show');
 }
 
 function flashKeyHint(cls) {
