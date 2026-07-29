@@ -81,6 +81,31 @@ ServerConfig config_load_file(const std::string& filepath) {
     cfg.trigger_pin = extract("pin", -1);
     cfg.timebase_us = extract("timebase_us", 500000);
 
+    // enabled_pins from JSON array
+    {
+        size_t p = json.find("\"enabled_pins\"");
+        if (p != std::string::npos) {
+            p = json.find('[', p);
+            if (p != std::string::npos) {
+                p++;
+                cfg.enabled_pins.clear();
+                while (p < json.size() && json[p] != ']') {
+                    while (p < json.size() && (json[p]==' '||json[p]=='\t'||json[p]=='\n')) p++;
+                    if (p >= json.size() || json[p] == ']') break;
+                    if (json[p] >= '0' && json[p] <= '9') {
+                        int val = 0;
+                        while (p < json.size() && json[p] >= '0' && json[p] <= '9') {
+                            val = val * 10 + (json[p] - '0');
+                            p++;
+                        }
+                        cfg.enabled_pins.push_back(val);
+                    } else p++;
+                    while (p < json.size() && json[p] == ',') p++;
+                }
+            }
+        }
+    }
+
     // channel_labels from JSON object
     {
         size_t p = json.find("\"labels\"");
@@ -156,6 +181,13 @@ bool config_save_file(const ServerConfig& cfg, const std::string& filepath) {
     json += "  \"timebase_us\": " + std::to_string(cfg.timebase_us) + ",\n";
     json += "  \"pin\": "         + std::to_string(cfg.trigger_pin) + ",\n";
     json += "  \"trigger_type\": \"" + cfg.trigger_type + "\",\n";
+    // Enabled pins
+    json += "  \"enabled_pins\": [";
+    for (size_t i = 0; i < cfg.enabled_pins.size(); i++) {
+        if (i > 0) json += ",";
+        json += std::to_string(cfg.enabled_pins[i]);
+    }
+    json += "],\n";
     // Labels
     json += "  \"labels\": {\n";
     {

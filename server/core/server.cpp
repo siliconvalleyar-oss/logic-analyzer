@@ -375,11 +375,20 @@ void LogicServer::handle_http(int fd, ClientState& c,
         c.write_buf += ws_encode_text(proto_build_state(
             config_.sample_rate_hz, pins_json(), config_.buffer_size));
         // Enviar configuracion persistida al cliente
-        c.write_buf += ws_encode_text(proto_build_config(
-            config_.timebase_us, config_.trigger_pin,
-            config_.trigger_type,
-            proto_build_labels_json(config_.channel_labels),
-            pins_json()));
+        {
+            std::string ep_json = "[";
+            for (size_t i = 0; i < config_.enabled_pins.size(); i++) {
+                if (i > 0) ep_json += ",";
+                ep_json += std::to_string(config_.enabled_pins[i]);
+            }
+            ep_json += "]";
+            c.write_buf += ws_encode_text(proto_build_config(
+                config_.timebase_us, config_.trigger_pin,
+                config_.trigger_type,
+                proto_build_labels_json(config_.channel_labels),
+                ep_json,
+                pins_json()));
+        }
         c.state = ClientState::WS_CONNECTED;
         c.read_buf.clear();
         set_writable(fd);
@@ -458,6 +467,31 @@ void LogicServer::handle_ws_frame(int fd, const WS_Frame& frame) {
             }
             config_save_file(config_);
             LOG_INFO("Server", "Labels updated (%zu entries) — config saved", config_.channel_labels.size());
+        } else if (cmd.find("\"set_enabled_pins\"") != std::string::npos) {
+            // Parse enabled pins JSON array: {"cmd":"set_enabled_pins","pins":[2,3,4,5]}
+            config_.enabled_pins.clear();
+            size_t pos = cmd.find("\"pins\"");
+            if (pos != std::string::npos) {
+                pos = cmd.find('[', pos);
+                if (pos != std::string::npos) {
+                    pos++;
+                    while (pos < cmd.size() && cmd[pos] != ']') {
+                        while (pos < cmd.size() && (cmd[pos]==' '||cmd[pos]=='\t')) pos++;
+                        if (pos >= cmd.size() || cmd[pos] == ']') break;
+                        if (cmd[pos] >= '0' && cmd[pos] <= '9') {
+                            int val = 0;
+                            while (pos < cmd.size() && cmd[pos] >= '0' && cmd[pos] <= '9') {
+                                val = val * 10 + (cmd[pos] - '0');
+                                pos++;
+                            }
+                            config_.enabled_pins.push_back(val);
+                        } else pos++;
+                        while (pos < cmd.size() && cmd[pos] == ',') pos++;
+                    }
+                }
+            }
+            config_save_file(config_);
+            LOG_INFO("Server", "Enabled pins updated (%zu enabled)", config_.enabled_pins.size());
         } else if (cmd.find("\"save_config\"") != std::string::npos) {
             LOG_INFO("Server", "Saving config to config.json");
             config_save_file(config_);

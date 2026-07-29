@@ -835,6 +835,19 @@ function handleMessage(msg) {
                 }
             }
         }
+        if (msg.enabled_pins && Array.isArray(msg.enabled_pins)) {
+            // Array vacio = todos habilitados (default)
+            if (msg.enabled_pins.length > 0) {
+                for (let i = 0; i < MAX_PINS; i++) {
+                    const enabled = msg.enabled_pins.includes(ALL_PINS[i]);
+                    state.channelEnabled[i] = enabled;
+                    const labels = document.querySelectorAll('.channel-label');
+                    if (labels[i]) {
+                        labels[i].style.opacity = enabled ? '1' : '0.3';
+                    }
+                }
+            }
+        }
         if (msg.pins) {
             document.getElementById('info-pins').textContent = msg.pins.length;
         }
@@ -2030,6 +2043,16 @@ function toggleChannel(idx) {
     if (labels[idx]) {
         labels[idx].style.opacity = state.channelEnabled[idx] ? '1' : '0.3';
     }
+    sendEnabledPinsToServer();
+}
+
+function sendEnabledPinsToServer() {
+    if (!state.connected) return;
+    const pins = [];
+    for (let i = 0; i < MAX_PINS; i++) {
+        if (state.channelEnabled[i]) pins.push(ALL_PINS[i]);
+    }
+    sendCommand({ cmd: 'set_enabled_pins', pins });
 }
 
 // ============================================================

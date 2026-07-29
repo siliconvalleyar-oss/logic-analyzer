@@ -43,12 +43,14 @@ std::string proto_build_state(int rate, const std::string& pins_json,
 std::string proto_build_config(int timebase_us, int trigger_pin,
                                const std::string& trigger_type,
                                const std::string& labels_json,
+                               const std::string& enabled_pins_json,
                                const std::string& pins_json) {
     return "{\"type\":\"config\""
            ",\"timebase_us\":" + std::to_string(timebase_us) +
            ",\"trigger_pin\":" + std::to_string(trigger_pin) +
            ",\"trigger_type\":\"" + trigger_type + "\""
            ",\"labels\":" + labels_json +
+           ",\"enabled_pins\":" + enabled_pins_json +
            ",\"pins\":" + pins_json +
            "}";
 }
