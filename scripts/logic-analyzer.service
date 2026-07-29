@@ -1,0 +1,58 @@
+#===============================================================================
+# logic-analyzer.service — systemd unit for Logic Analyzer Server
+#
+# Instalacion:
+#   sudo cp scripts/logic-analyzer.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable logic-analyzer
+#   sudo systemctl start logic-analyzer
+#
+# Ver logs:
+#   sudo journalctl -u logic-analyzer -f
+#
+# Estado:
+#   sudo systemctl status logic-analyzer
+#===============================================================================
+
+[Unit]
+Description=Logic Analyzer Server — 26-channel digital logic analyzer for Raspberry Pi
+Documentation=https://github.com/siliconvalleyar-oss/logic-analyzer
+Documentation=https://github.com/siliconvalleyar-oss/logic-analyzer/blob/master/docs/ARCHITECTURE.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# Ejecutar como usuario 'pi' con grupo 'gpio' (para /dev/gpiomem)
+User=pi
+Group=gpio
+
+# Directorio de trabajo y binario
+WorkingDirectory=/opt/logic-analyzer
+ExecStart=/opt/logic-analyzer/server/logic_server --config /etc/logic-analyzer/config.json
+
+# Reinicio automatico en caso de falla
+Restart=on-failure
+RestartSec=5
+
+# Limite de archivos abiertos (para multiples clientes WebSocket)
+LimitNOFILE=65536
+
+# Hardening basico
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/log/logic-analyzer /etc/logic-analyzer
+
+# Metricas de sistema
+CPUAccounting=yes
+MemoryAccounting=yes
+
+# Timeout de inicio
+TimeoutStartSec=10
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target

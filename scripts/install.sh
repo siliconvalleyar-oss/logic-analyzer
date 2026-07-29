@@ -97,26 +97,15 @@ sudo cp ../config.json "$CONFIG_DIR/" 2>/dev/null || print_warn "No config.json 
 if [[ -d /etc/systemd/system ]]; then
     echo ""
     echo "Step 4: Installing systemd service..."
-    sudo tee /etc/systemd/system/logic-analyzer.service > /dev/null <<'SVC'
-[Unit]
-Description=Logic Analyzer Server
-Documentation=https://github.com/siliconvalleyar-oss/logic_analizer_rpi
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=PREFIX/bin/logic_server --config CONFIG_DIR/config.json
-Restart=on-failure
-RestartSec=5
-LimitNOFILE=65536
-
-[Install]
-WantedBy=multi-user.target
-SVC
-    sudo sed -i "s|PREFIX|$PREFIX|g; s|CONFIG_DIR|$CONFIG_DIR|g" /etc/systemd/system/logic-analyzer.service
-    sudo systemctl daemon-reload
-    print_ok "Service installed. Start with: sudo systemctl start logic-analyzer"
+    if [[ -f "$(dirname "$0")/logic-analyzer.service" ]]; then
+        sudo cp "$(dirname "$0")/logic-analyzer.service" /etc/systemd/system/
+        sudo sed -i "s|/opt/logic-analyzer|$PREFIX|g" /etc/systemd/system/logic-analyzer.service
+        sudo sed -i "s|/etc/logic-analyzer|$CONFIG_DIR|g" /etc/systemd/system/logic-analyzer.service
+        sudo systemctl daemon-reload
+        print_ok "Service installed. Start with: sudo systemctl start logic-analyzer"
+    else
+        print_warn "logic-analyzer.service not found in scripts/, skipping"
+    fi
 fi
 
 echo ""
