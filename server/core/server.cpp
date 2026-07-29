@@ -309,14 +309,12 @@ void LogicServer::broadcast_loop() {
         // Leer need_reset ANTES de truncar, para no perder el flag
         bool need_reset = pending_reset_.exchange(false, std::memory_order_acq_rel);
 
-        // Limitar tamano del mensaje WebSocket. En reset (RUN o reconexion)
-        // enviamos mas muestras para que el cliente tenga una vision completa;
-        // en modo continuo enviamos todo lo disponible (hasta buffer completo).
-        constexpr size_t MAX_BURST_RESET = 65536;  // buffer completo
-        constexpr size_t MAX_BURST_NORMAL = 65536;  // buffer completo
-        if (samples.size() > MAX_BURST_NORMAL) {
+        // Limitar tamano del mensaje WebSocket.
+        // Enviamos todo lo disponible (hasta buffer completo).
+        constexpr size_t MAX_BURST = 65536;  // buffer completo (65536 muestras)
+        if (samples.size() > MAX_BURST) {
             samples.erase(samples.begin(),
-                          samples.begin() + (samples.size() - MAX_BURST_NORMAL));
+                          samples.begin() + (samples.size() - MAX_BURST));
         }
 
         // Buscar indice de trigger:
