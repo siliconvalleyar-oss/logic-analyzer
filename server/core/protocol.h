@@ -9,6 +9,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 #include <cstdint>
 #include "hardware/ring_buffer.h"
 #include "analysis/trigger.h"
@@ -49,7 +50,15 @@ std::string proto_build_state(int rate, const std::string& pins_json,
  */
 std::string proto_build_config(int timebase_us, int trigger_pin,
                                const std::string& trigger_type,
+                               const std::string& labels_json = "{}",
                                const std::string& pins_json = "[]");
+
+/**
+ * Construye un JSON de labels a partir de un map pin->label.
+ * @param labels  Mapa de pin a label
+ * @return        String JSON, ej: {"2":"CLK","3":"DATA"}
+ */
+std::string proto_build_labels_json(const std::map<int, std::string>& labels);
 
 /**
  * Extrae el valor de un campo string de un JSON.

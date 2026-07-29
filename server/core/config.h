@@ -9,6 +9,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 
 /**
  * Configuracion completa del servidor del analizador logico.
@@ -42,6 +43,7 @@ struct ServerConfig {
 
     // Display (persistido desde frontend)
     int     timebase_us    = 500000; ///< Timebase por division en microsegundos (default 500ms)
+    std::map<int, std::string> channel_labels; ///< Labels por GPIO, ej: {2:"CLK", 3:"DATA"}
 
     // Trigger
     int     trigger_pin    = -1;     ///< Pin GPIO para trigger (-1 = desactivado)

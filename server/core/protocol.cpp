@@ -42,13 +42,27 @@ std::string proto_build_state(int rate, const std::string& pins_json,
 
 std::string proto_build_config(int timebase_us, int trigger_pin,
                                const std::string& trigger_type,
+                               const std::string& labels_json,
                                const std::string& pins_json) {
     return "{\"type\":\"config\""
            ",\"timebase_us\":" + std::to_string(timebase_us) +
            ",\"trigger_pin\":" + std::to_string(trigger_pin) +
            ",\"trigger_type\":\"" + trigger_type + "\""
+           ",\"labels\":" + labels_json +
            ",\"pins\":" + pins_json +
            "}";
+}
+
+std::string proto_build_labels_json(const std::map<int, std::string>& labels) {
+    std::string json = "{";
+    bool first = true;
+    for (const auto& [pin, label] : labels) {
+        if (!first) json += ",";
+        first = false;
+        json += "\"" + std::to_string(pin) + "\":\"" + label + "\"";
+    }
+    json += "}";
+    return json;
 }
 
 std::string proto_extract_string(const std::string& json,

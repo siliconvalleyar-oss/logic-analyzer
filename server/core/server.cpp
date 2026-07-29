@@ -376,7 +376,9 @@ void LogicServer::handle_http(int fd, ClientState& c,
         // Enviar configuracion persistida al cliente
         c.write_buf += ws_encode_text(proto_build_config(
             config_.timebase_us, config_.trigger_pin,
-            config_.trigger_type, pins_json()));
+            config_.trigger_type,
+            proto_build_labels_json(config_.channel_labels),
+            pins_json()));
         c.state = ClientState::WS_CONNECTED;
         c.read_buf.clear();
         set_writable(fd);
@@ -417,6 +419,41 @@ void LogicServer::handle_ws_frame(int fd, const WS_Frame& frame) {
             int value_us = proto_extract_int(cmd, "value_us", 500000);
             config_.timebase_us = value_us;
             LOG_INFO("Server", "Timebase set to %d us/div", value_us);
+        } else if (cmd.find("\"set_labels\"") != std::string::npos) {
+            // Parse labels from JSON: {"cmd":"set_labels","labels":{"2":"CLK","3":"DATA"}}
+            config_.channel_labels.clear();
+            size_t pos = cmd.find("\"labels\"");
+            if (pos != std::string::npos) {
+                pos = cmd.find('{', pos);
+                if (pos != std::string::npos) {
+                    pos++; // skip {
+                    while (pos < cmd.size()) {
+                        while (pos < cmd.size() && (cmd[pos]==' '||cmd[pos]=='\t')) pos++;
+                        if (pos >= cmd.size() || cmd[pos] == '}') break;
+                        if (cmd[pos] != '"') break;
+                        pos++;
+                        std::string key;
+                        while (pos < cmd.size() && cmd[pos] != '"') { key += cmd[pos]; pos++; }
+                        if (pos >= cmd.size()) break;
+                        pos++;
+                        while (pos < cmd.size() && cmd[pos] != ':') pos++;
+                        if (pos >= cmd.size()) break;
+                        pos++;
+                        while (pos < cmd.size() && (cmd[pos]==' '||cmd[pos]=='\t')) pos++;
+                        if (pos >= cmd.size() || cmd[pos] != '"') break;
+                        pos++;
+                        std::string val;
+                        while (pos < cmd.size() && cmd[pos] != '"') { val += cmd[pos]; pos++; }
+                        if (pos >= cmd.size()) break;
+                        pos++;
+                        int pin = atoi(key.c_str());
+                        if (pin > 0) config_.channel_labels[pin] = val;
+                        while (pos < cmd.size() && cmd[pos] != ',' && cmd[pos] != '}') pos++;
+                        if (pos < cmd.size() && cmd[pos] == ',') pos++;
+                    }
+                }
+            }
+            LOG_INFO("Server", "Labels updated (%zu entries)", config_.channel_labels.size());
         } else if (cmd.find("\"save_config\"") != std::string::npos) {
             LOG_INFO("Server", "Saving config to config.json");
             config_save_file(config_);

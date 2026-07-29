@@ -571,6 +571,7 @@ function buildChannelList() {
         const inp = div.querySelector('.chan-name');
         inp.addEventListener('change', () => {
             state.channelLabels[i] = inp.value;
+            sendLabelsToServer();
         });
         inp.addEventListener('click', e => e.stopPropagation());
         labels.appendChild(div);
@@ -806,6 +807,18 @@ function handleMessage(msg) {
             document.getElementById('trigger-type').value = msg.trigger_type;
             updateTrigger();
         }
+        if (msg.labels) {
+            // Restaurar labels persistidos (ej: {"2":"CLK","3":"DATA"})
+            for (const [pinStr, label] of Object.entries(msg.labels)) {
+                const pin = parseInt(pinStr);
+                const idx = ALL_PINS.indexOf(pin);
+                if (idx >= 0) {
+                    state.channelLabels[idx] = label;
+                    const inputs = document.querySelectorAll('.chan-name');
+                    if (inputs[idx]) inputs[idx].value = label;
+                }
+            }
+        }
         if (msg.pins) {
             document.getElementById('info-pins').textContent = msg.pins.length;
         }
@@ -863,6 +876,20 @@ function autoFitTimebase() {
     // Sincronizar el select HTML
     const sel = document.getElementById('timebase');
     sel.value = String(best);
+}
+
+function sendLabelsToServer() {
+    if (!state.connected) return;
+    // Construir JSON con solo labels no default
+    const labels = {};
+    for (let i = 0; i < MAX_PINS; i++) {
+        const defaultLabel = `GPIO${ALL_PINS[i]}`;
+        if (state.channelLabels[i] !== defaultLabel) {
+            labels[ALL_PINS[i]] = state.channelLabels[i];
+        }
+    }
+    sendCommand({ cmd: 'set_labels', labels });
+    sendCommand({ cmd: 'save_config' });
 }
 
 function updateTrigger() {

@@ -81,6 +81,46 @@ ServerConfig config_load_file(const std::string& filepath) {
     cfg.trigger_pin = extract("pin", -1);
     cfg.timebase_us = extract("timebase_us", 500000);
 
+    // channel_labels from JSON object
+    {
+        size_t p = json.find("\"labels\"");
+        if (p != std::string::npos) {
+            p = json.find('{', p);
+            if (p != std::string::npos) {
+                p++; // skip {
+                while (p < json.size()) {
+                    // skip whitespace
+                    while (p < json.size() && (json[p]==' '||json[p]=='\t'||json[p]=='\n')) p++;
+                    if (p >= json.size() || json[p] == '}') break;
+                    // find key (pin number as string)
+                    if (json[p] != '"') break;
+                    p++;
+                    std::string key;
+                    while (p < json.size() && json[p] != '"') { key += json[p]; p++; }
+                    if (p >= json.size()) break;
+                    p++; // skip "
+                    // find :
+                    while (p < json.size() && json[p] != ':') p++;
+                    if (p >= json.size()) break;
+                    p++; // skip :
+                    while (p < json.size() && (json[p]==' '||json[p]=='\t')) p++;
+                    // find value
+                    if (p >= json.size() || json[p] != '"') break;
+                    p++;
+                    std::string val;
+                    while (p < json.size() && json[p] != '"') { val += json[p]; p++; }
+                    if (p >= json.size()) break;
+                    p++; // skip "
+                    int pin = atoi(key.c_str());
+                    if (pin > 0) cfg.channel_labels[pin] = val;
+                    // look for comma or }
+                    while (p < json.size() && json[p] != ',' && json[p] != '}') p++;
+                    if (p < json.size() && json[p] == ',') p++;
+                }
+            }
+        }
+    }
+
     // trigger_type string
     {
         size_t p = json.find("\"trigger_type\"");
@@ -115,7 +155,18 @@ bool config_save_file(const ServerConfig& cfg, const std::string& filepath) {
     json += "  \"buffer_size\": " + std::to_string(cfg.buffer_size) + ",\n";
     json += "  \"timebase_us\": " + std::to_string(cfg.timebase_us) + ",\n";
     json += "  \"pin\": "         + std::to_string(cfg.trigger_pin) + ",\n";
-    json += "  \"trigger_type\": \"" + cfg.trigger_type + "\"\n";
+    json += "  \"trigger_type\": \"" + cfg.trigger_type + "\",\n";
+    // Labels
+    json += "  \"labels\": {\n";
+    {
+        bool first = true;
+        for (const auto& [pin, label] : cfg.channel_labels) {
+            if (!first) json += ",\n";
+            first = false;
+            json += "    \"" + std::to_string(pin) + "\": \"" + label + "\"";
+        }
+    }
+    json += "\n  }\n";
     json += "}\n";
 
     bool ok = (fwrite(json.data(), 1, json.size(), f) == json.size());
