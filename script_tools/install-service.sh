@@ -6,11 +6,11 @@
 # recarga systemd, habilita el inicio automatico y (opcionalmente) lo arranca.
 #
 # Usage:
-#   sudo ./scripts/install-service.sh              # Instalar + habilitar + iniciar
-#   sudo ./scripts/install-service.sh --no-start   # Instalar + habilitar, NO iniciar
-#   sudo ./scripts/install-service.sh --uninstall   # Detener + deshabilitar + borrar
-#   ./scripts/install-service.sh --status           # Ver estado (no necesita sudo)
-#   ./scripts/install-service.sh --help             # Mostrar ayuda
+#   sudo ./script_tools/install-service.sh              # Instalar + habilitar + iniciar
+#   sudo ./script_tools/install-service.sh --no-start   # Instalar + habilitar, NO iniciar
+#   sudo ./script_tools/install-service.sh --uninstall   # Detener + deshabilitar + borrar
+#   ./script_tools/install-service.sh --status           # Ver estado (no necesita sudo)
+#   ./script_tools/install-service.sh --help             # Mostrar ayuda
 #
 # Requiere: systemd, sudo
 #===============================================================================
@@ -101,7 +101,7 @@ do_install() {
     if [[ ! -f "${SOURCE_PATH}" ]]; then
         err "No se encuentra ${SOURCE_PATH}"
         err "Ejecuta este script desde el directorio raiz del proyecto:"
-        err "  sudo ./scripts/install-service.sh"
+        err "  sudo ./script_tools/install-service.sh"
         exit 1
     fi
 

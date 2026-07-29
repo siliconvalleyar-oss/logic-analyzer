@@ -3,9 +3,9 @@
 # install.sh — Logic Analyzer RPi Installation Script
 #
 # Usage:
-#   ./scripts/install.sh              # Install to /opt/logic-analyzer
-#   ./scripts/install.sh --prefix ~/local  # Custom prefix
-#   ./scripts/install.sh --help
+#   ./script_tools/install.sh              # Install to /opt/logic-analyzer
+#   ./script_tools/install.sh --prefix ~/local  # Custom prefix
+#   ./script_tools/install.sh --help
 #==============================================================================
 
 set -euo pipefail
