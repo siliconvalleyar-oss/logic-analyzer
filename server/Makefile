@@ -55,10 +55,14 @@ test: $(TARGET)
 	@echo "=== Test complete ==="
 
 docs:
-	@echo "Generating documentation..."
-	@which doxygen > /dev/null 2>&1 && doxygen Doxyfile 2>/dev/null || \
-	 echo "Warning: doxygen not installed"
-	@echo "Docs: docs/doxygen/html/index.html"
+	@echo "=== Generating Doxygen documentation ==="
+	@if which doxygen > /dev/null 2>&1; then \
+	    mkdir -p ../docs/doxygen/server && \
+	    doxygen Doxyfile 2>&1; \
+	    echo "Docs: docs/doxygen/server/html/index.html"; \
+	else \
+	    echo "Warning: doxygen not installed. Install: sudo apt install doxygen"; \
+	fi
 
 clean:
 	rm -f $(OBJS) $(TARGET)
