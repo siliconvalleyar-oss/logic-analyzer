@@ -14,7 +14,7 @@ Analizador logico de **8 a 26 canales digitales** que usa los GPIO de una **Rasp
 ## Repositorio
 
 ```
-logic_analizer_rpi/
+logic-analyzer/
 ├── README.md              # Este archivo
 ├── PROMPT.md              # Prompt completo para IA generar el proyecto
 ├── server/
