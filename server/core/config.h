@@ -27,6 +27,7 @@ struct ServerConfig {
     // Server
     int     http_port   = 8080;  ///< Puerto HTTP/WebSocket
     int     ws_port     = 8080;  ///< mismo puerto, upgrade a WS
+    std::string config_path = "config.json"; ///< Ruta al archivo de config guardado
 
     // Acquisition
     std::vector<int> pins = {2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,
@@ -39,10 +40,21 @@ struct ServerConfig {
     std::string log_file   = "";    ///< Ruta al archivo de log (vacio = solo stderr)
     std::string log_level  = "INFO"; ///< Nivel minimo: DEBUG, INFO, WARN, ERROR
 
+    // Display (persistido desde frontend)
+    int     timebase_us    = 500000; ///< Timebase por division en microsegundos (default 500ms)
+
     // Trigger
     int     trigger_pin    = -1;     ///< Pin GPIO para trigger (-1 = desactivado)
     std::string trigger_type = "rising"; ///< rising, falling, both, high, low
 };
+
+/**
+ * Guarda la configuracion actual en un archivo JSON.
+ * @param cfg   Configuracion a guardar
+ * @param filepath Ruta al archivo (default: config.json)
+ * @return      true si se guardo correctamente
+ */
+bool config_save_file(const ServerConfig& cfg, const std::string& filepath = "config.json");
 
 /**
  * Parsea argumentos de linea de comandos.

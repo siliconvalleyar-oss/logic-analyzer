@@ -9,6 +9,7 @@
 #include "core/protocol.h"
 #include "core/version.h"
 #include "core/logger.h"
+#include "core/config.h"
 
 #include <cstring>
 #include <cstdio>
@@ -372,10 +373,14 @@ void LogicServer::handle_http(int fd, ClientState& c,
         c.write_buf += resp;
         c.write_buf += ws_encode_text(proto_build_state(
             config_.sample_rate_hz, pins_json(), config_.buffer_size));
+        // Enviar configuracion persistida al cliente
+        c.write_buf += ws_encode_text(proto_build_config(
+            config_.timebase_us, config_.trigger_pin,
+            config_.trigger_type, pins_json()));
         c.state = ClientState::WS_CONNECTED;
         c.read_buf.clear();
         set_writable(fd);
-        LOG_INFO("Server", "101 queued, state queued, ws connected");
+        LOG_INFO("Server", "101 queued, state+config queued, ws connected");
 
         LOG_INFO("Server", "Client %d upgraded to WebSocket", fd);
     } else {
@@ -404,7 +409,17 @@ void LogicServer::handle_ws_frame(int fd, const WS_Frame& frame) {
             std::string type = proto_extract_string(cmd, "type");
             trigger_.pin  = pin;
             trigger_.type = TriggerConfig::from_string(type);
+            // Persistir en config
+            config_.trigger_pin  = pin;
+            config_.trigger_type = type;
             LOG_INFO("Trigger", "GPIO%d %s", pin, type.c_str());
+        } else if (cmd.find("\"set_timebase\"") != std::string::npos) {
+            int value_us = proto_extract_int(cmd, "value_us", 500000);
+            config_.timebase_us = value_us;
+            LOG_INFO("Server", "Timebase set to %d us/div", value_us);
+        } else if (cmd.find("\"save_config\"") != std::string::npos) {
+            LOG_INFO("Server", "Saving config to config.json");
+            config_save_file(config_);
         } else if (cmd.find("\"run\"") != std::string::npos) {
             LOG_INFO("Server", "Cmd: run — resuming");
             paused_.store(false, std::memory_order_release);

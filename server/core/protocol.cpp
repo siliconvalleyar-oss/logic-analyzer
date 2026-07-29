@@ -40,6 +40,17 @@ std::string proto_build_state(int rate, const std::string& pins_json,
            ",\"samples\":" + std::to_string(buf_size) + "}";
 }
 
+std::string proto_build_config(int timebase_us, int trigger_pin,
+                               const std::string& trigger_type,
+                               const std::string& pins_json) {
+    return "{\"type\":\"config\""
+           ",\"timebase_us\":" + std::to_string(timebase_us) +
+           ",\"trigger_pin\":" + std::to_string(trigger_pin) +
+           ",\"trigger_type\":\"" + trigger_type + "\""
+           ",\"pins\":" + pins_json +
+           "}";
+}
+
 std::string proto_extract_string(const std::string& json,
                                  const std::string& key) {
     size_t pos = json.find("\"" + key + "\"");

@@ -25,6 +25,7 @@ ServerConfig config_parse_args(int argc, char* argv[]) {
         } else if (arg == "-c" || arg == "--config") {
             if (i + 1 < argc) {
                 cfg = config_load_file(argv[++i]);
+                cfg.config_path = argv[i];  // recordar ruta para guardar
             }
         } else if (arg == "--simulate") {
             cfg.simulate = true;
@@ -78,8 +79,54 @@ ServerConfig config_load_file(const std::string& filepath) {
     cfg.sample_rate_hz = extract("rate_hz", 500000);
     cfg.buffer_size = extract("buffer_size", 4096);
     cfg.trigger_pin = extract("pin", -1);
+    cfg.timebase_us = extract("timebase_us", 500000);
+
+    // trigger_type string
+    {
+        size_t p = json.find("\"trigger_type\"");
+        if (p != std::string::npos) {
+            p = json.find(':', p) + 1;
+            while (p < json.size() && (json[p]==' '||json[p]=='\t')) p++;
+            if (p < json.size() && json[p] == '"') {
+                p++;
+                cfg.trigger_type = "";
+                while (p < json.size() && json[p] != '"') {
+                    cfg.trigger_type += json[p];
+                    p++;
+                }
+            }
+        }
+    }
 
     return cfg;
+}
+
+bool config_save_file(const ServerConfig& cfg, const std::string& filepath) {
+    std::string save_path = filepath.empty() ? cfg.config_path : filepath;
+    FILE* f = fopen(save_path.c_str(), "wb");
+    if (!f) {
+        std::cerr << "[Config] Cannot write: " << filepath << std::endl;
+        return false;
+    }
+
+    std::string json = "{\n";
+    json += "  \"http_port\": "    + std::to_string(cfg.http_port) + ",\n";
+    json += "  \"rate_hz\": "     + std::to_string(cfg.sample_rate_hz) + ",\n";
+    json += "  \"buffer_size\": " + std::to_string(cfg.buffer_size) + ",\n";
+    json += "  \"timebase_us\": " + std::to_string(cfg.timebase_us) + ",\n";
+    json += "  \"pin\": "         + std::to_string(cfg.trigger_pin) + ",\n";
+    json += "  \"trigger_type\": \"" + cfg.trigger_type + "\"\n";
+    json += "}\n";
+
+    bool ok = (fwrite(json.data(), 1, json.size(), f) == json.size());
+    fclose(f);
+
+    if (ok) {
+        std::cout << "[Config] Saved: " << filepath << std::endl;
+    } else {
+        std::cerr << "[Config] Write failed: " << filepath << std::endl;
+    }
+    return ok;
 }
 
 void config_print_help(const char* name) {

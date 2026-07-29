@@ -377,7 +377,7 @@ html, body {
     <select id="timebase" onchange="setTimebase(this.value)">
         <option value="1">1 µs/div</option>
         <option value="5">5 µs/div</option>
-        <option value="10" selected>10 µs/div</option>
+        <option value="10">10 µs/div</option>
         <option value="50">50 µs/div</option>
         <option value="100">100 µs/div</option>
         <option value="500">500 µs/div</option>
@@ -386,7 +386,7 @@ html, body {
         <option value="10000">10 ms/div</option>
         <option value="50000">50 ms/div</option>
         <option value="100000">100 ms/div</option>
-        <option value="500000">500 ms/div</option>
+        <option value="500000" selected>500 ms/div</option>
     </select>
 
     <div class="toolbar-sep"></div>
@@ -479,7 +479,7 @@ const state = {
     mode:           'run',
     running:        true,
     sampleRate:     1000000,
-    timebaseUs:     10,
+    timebaseUs:     500000,
     zoomLevel:      1,
 
     // Data
@@ -490,6 +490,9 @@ const state = {
     // Cached time in microseconds (pre-computed, updated on new data)
     timeUsCache:    [],
     firstTsCache:   0,
+
+    // First-auto-fit flag: true = don't auto-fit on first data (user chose default 500ms)
+    _autoFitDone:   true,
 
     // Channels
     channelLabels:  [],
@@ -764,6 +767,7 @@ function handleMessage(msg) {
             if (msg.rate) state.sampleRate = msg.rate;
 
             // Auto-fit timebase la primera vez que llegan datos
+            // (solo si el usuario no ha elegido explicitamente un timebase)
             if (!state._autoFitDone && state.timestamps.length >= 2) {
                 const dataDur = (state.timestamps[state.timestamps.length-1] - state.timestamps[0]) / 1000;
                 const visibleTime = state.timebaseUs * 10 / state.zoomLevel;
@@ -790,6 +794,21 @@ function handleMessage(msg) {
         document.getElementById('info-pins').textContent =
             msg.pins ? msg.pins.length : 0;
         if (msg.samples) state.maxSamples = msg.samples;
+    } else if (msg.type === 'config') {
+        // Restaurar configuracion persistida en el servidor
+        if (msg.timebase_us) {
+            state.timebaseUs = msg.timebase_us;
+            updatePixelsPerUs();
+            document.getElementById('timebase').value = String(msg.timebase_us);
+        }
+        if (msg.trigger_pin !== undefined && msg.trigger_type) {
+            document.getElementById('trigger-pin').value = msg.trigger_pin;
+            document.getElementById('trigger-type').value = msg.trigger_type;
+            updateTrigger();
+        }
+        if (msg.pins) {
+            document.getElementById('info-pins').textContent = msg.pins.length;
+        }
     }
 }
 
@@ -814,6 +833,12 @@ function setMode(mode) {
 function setTimebase(val) {
     state.timebaseUs = parseInt(val);
     updatePixelsPerUs();
+    // Enviar timebase al servidor remoto para persistencia
+    if (state.connected) {
+        sendCommand({ cmd: 'set_timebase', value_us: state.timebaseUs });
+        // Solicitar guardar configuracion en la Raspberry Pi
+        sendCommand({ cmd: 'save_config' });
+    }
 }
 
 function autoFitTimebase() {
@@ -1214,7 +1239,7 @@ function render(timestamp) {
 
             if (bit !== prevBit) {
                 // Transición vertical: línea horizontal hasta el punto de cambio, luego vertical
-                ctx.lineTo(x, prevBit ? yLow : yHigh);
+                ctx.lineTo(x, prevBit ? yHigh : yLow);
                 ctx.lineTo(x, y);
                 prevBit = bit;
             } else {

@@ -39,6 +39,19 @@ std::string proto_build_state(int rate, const std::string& pins_json,
                               int buf_size);
 
 /**
+ * Construye un mensaje JSON de tipo "config" con la configuracion persistida.
+ *
+ * @param timebase_us  Timebase en microsegundos
+ * @param trigger_pin  Pin de trigger (-1 si desactivado)
+ * @param trigger_type Tipo de trigger (rising, falling, etc.)
+ * @param pins_json    String JSON con la lista de pines
+ * @return             String JSON listo para enviar
+ */
+std::string proto_build_config(int timebase_us, int trigger_pin,
+                               const std::string& trigger_type,
+                               const std::string& pins_json = "[]");
+
+/**
  * Extrae el valor de un campo string de un JSON.
  *
  * @param json   String JSON completo
