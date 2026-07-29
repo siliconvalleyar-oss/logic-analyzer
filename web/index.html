@@ -136,7 +136,23 @@ html, body {
     cursor:pointer; font-family:inherit;
 }
 #toolbar select:focus { outline:none; border-color:#4ECDC4; }
-#toolbar label { font-size:12px; color:#6b7a8a; }
+#toolbar label { font-size:12px; color:#6b7a8a; display:inline-flex; align-items:center; gap:4px; }
+#toolbar label kbd {
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:14px; height:14px; padding:0 3px;
+    border-radius:3px;
+    font-size:9px; font-weight:700; font-family:inherit;
+    line-height:1;
+    background:rgba(255,255,255,0.06);
+    color:rgba(255,255,255,0.3);
+    border:1px solid rgba(255,255,255,0.06);
+    transition:all 0.2s;
+}
+#toolbar label kbd.key-hint-active {
+    background:rgba(78,205,196,0.2);
+    color:#4ECDC4;
+    border-color:rgba(78,205,196,0.3);
+}
 
 .trigger-badge {
     display:inline-flex; align-items:center; gap:4px;
@@ -467,7 +483,7 @@ html, body {
 
     <div class="toolbar-sep"></div>
 
-    <label>Trigger</label>
+    <label>Trigger<kbd>T</kbd></label>
     <select id="trigger-pin" onchange="updateTrigger()">
         <option value="-1">None</option>
     </select>
@@ -491,9 +507,9 @@ html, body {
 
     <div class="toolbar-sep"></div>
 
-    <button onclick="toggleCursors()">☰ Cursors</button>
-    <button onclick="exportCSV()">📥 CSV</button>
-    <button onclick="resetZoom()">⟲ Fit</button>
+    <button onclick="toggleCursors()">☰ Cursors<kbd>C</kbd></button>
+    <button onclick="exportCSV()">📥 CSV<kbd>E</kbd></button>
+    <button onclick="resetZoom()">⟲ Fit<kbd>F</kbd></button>
 </div>
 
 <!-- ============================================================
@@ -1279,14 +1295,52 @@ function handleKeyDown(e) {
             setMode('single');
             flashKeyHint('single');
             break;
+        case 'c':
+            e.preventDefault();
+            toggleCursors();
+            flashKeyHint('cursors');
+            break;
+        case 'e':
+            e.preventDefault();
+            exportCSV();
+            flashKeyHint('csv');
+            break;
+        case 'f':
+            e.preventDefault();
+            resetZoom();
+            flashKeyHint('fit');
+            break;
+        case 't':
+            e.preventDefault();
+            {
+                const sel = document.getElementById('trigger-pin');
+                if (sel) sel.focus();
+            }
+            flashKeyHint('trigger');
+            break;
     }
 }
 
 function flashKeyHint(cls) {
-    const btn = document.querySelector(`#toolbar button.${cls} kbd`);
-    if (btn) {
-        btn.classList.add('key-hint-active');
-        setTimeout(() => btn.classList.remove('key-hint-active'), 200);
+    // Intentar en botones primero
+    let el = document.querySelector(`#toolbar button.${cls} kbd`);
+    if (!el) {
+        // Buscar en labels
+        el = document.querySelector(`#toolbar label[for] kbd, #toolbar label kbd`);
+        // Para el trigger, buscar label que contiene "Trigger"
+        if (cls === 'trigger') {
+            const labels = document.querySelectorAll('#toolbar label');
+            for (const lbl of labels) {
+                if (lbl.textContent.includes('Trigger')) {
+                    el = lbl.querySelector('kbd');
+                    break;
+                }
+            }
+        }
+    }
+    if (el) {
+        el.classList.add('key-hint-active');
+        setTimeout(() => el.classList.remove('key-hint-active'), 200);
     }
 }
 
