@@ -87,3 +87,25 @@ Ver [`BUGS.md`](BUGS.md) para el tracking completo con causas raíz, fixes y est
 - [ ] Usar memory pool para evitar allocaciones en polling loop
 - [ ] Documentar todas las funciones con Doxygen
 - [ ] Cubrir bordes: buffer vacio, overflow, clientes lentos
+
+## Warnings de compilación (aarch64, GCC 12)
+
+Compilación remota en Raspberry Pi con flags estrictos (`-Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion -Wcast-align -Wformat=2`):
+
+| Archivo | Línea | Warning | Tipo | ¿Bug? |
+|---------|-------|---------|------|-------|
+| `config.cpp` | 59 | `long int` → `size_t` (ftell) | sign-conversion | ❌ |
+| `config.cpp` | 60 | `long int` → `size_t` (fread) | sign-conversion | ❌ |
+| `config.cpp` | 92,106 | `&&` dentro de `\|\|` sin paréntesis | parentheses | ❌ |
+| `server.cpp` | 41 | `int` → `size_t` (buffer_size) | sign-conversion | ❌ |
+| `server.cpp` | 75 | `int` → `uint16_t` (htons) | conversion | ❌ |
+| `server.cpp` | 135 | `int` → `uint64_t` (rate) | sign-conversion | ❌ |
+| `server.cpp` | 161 | chrono count → `uint64_t` | sign-conversion | ❌ |
+| `server.cpp` | 317,499 | `size_t` → iterator diff_type | sign-conversion | ❌ |
+| `server.cpp` | 477,821 | `ssize_t` → `size_t` | sign-conversion | ❌ |
+| `server.cpp` | 752 | `[fd,st]` shadows parámetro `fd` | shadow | ❌ |
+| `server.cpp` | 893,894 | `long int` → `size_t` (ftell) | sign-conversion | ❌ |
+| `ring_buffer.cpp` | 32,35,36 | `size_t` → iterator diff_type | sign-conversion | ❌ |
+| `gpio.cpp` | 40 | `~(7 << bit)` sobre signed | sign-conversion | ❌ |
+
+**22 warnings totales, 0 bugs reales.** Todos los valores son siempre no-negativos y dentro de rango. Si se quiere compilar con `-Werror`, hay que agregar ~18 casts explícitos + paréntesis + renombrar variable shadowed. Pendiente de hacer.
